@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Header from '@/components/Header';
 import ErpGroupsPanel from '@/components/ErpGroupsPanel';
+import HeaderNavPicker from '@/components/HeaderNavPicker';
 import {
   TESTIMONIAL_REVIEWS,
   CURATED_STYLES_CARDS,
@@ -297,11 +298,8 @@ export default function UploadPage() {
         {/* ── TESTIMONIALS ── */}
         <TestimonialsEditor />
 
-        {/* ── HEADER NAV (ERP groups — same source as storefront Header) ── */}
-        <ErpGroupsPanel
-          title="Header"
-          description="Storefront header tabs are loaded from ERP groups (top stock counts). Editing tabs here was retired so nav cannot drift from live inventory."
-        />
+        {/* ── HEADER NAV — pick up to 8 ERP groups for storefront tabs ── */}
+        <HeaderNavPicker />
 
       </div>
     </div>

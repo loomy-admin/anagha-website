@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   fetchCatalog,
   fetchCatalogFilters,
+  fetchGroupImages,
   groupImageForSlug,
   slugifyName,
   type CatalogFilterOption,
@@ -17,6 +18,7 @@ type Props = {
 
 export default function ErpGroupsPanel({ title, description }: Props) {
   const [groups, setGroups] = useState<CatalogFilterOption[]>([]);
+  const [imageOverrides, setImageOverrides] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,8 +26,12 @@ export default function ErpGroupsPanel({ title, description }: Props) {
     let cancelled = false;
     async function load() {
       try {
-        const payload = await fetchCatalogFilters();
+        const [payload, images] = await Promise.all([
+          fetchCatalogFilters(),
+          fetchGroupImages().catch(() => ({})),
+        ]);
         if (cancelled) return;
+        setImageOverrides(images);
         const base = [...(payload.filters?.group || [])];
         const withExactCounts = await Promise.all(
           base.map(async (g) => {
@@ -96,7 +102,7 @@ export default function ErpGroupsPanel({ title, description }: Props) {
               >
                 <div className="w-full aspect-square rounded-[18px] bg-[#f4f6f9] flex items-center justify-center group-hover:shadow-md transition-shadow">
                   <img
-                    src={groupImageForSlug(slug)}
+                    src={groupImageForSlug(slug, imageOverrides)}
                     alt={g.name}
                     className="w-[75%] h-[75%] object-contain"
                   />

@@ -90,8 +90,8 @@ async function main() {
       customer_name TEXT,
       customer_mobile TEXT,
       customer_email TEXT,
-      phonepe_merchant_txn_id TEXT,
-      phonepe_txn_id TEXT,
+      razorpay_order_id TEXT,
+      razorpay_payment_id TEXT,
       erp_bill_id TEXT,
       erp_bill_number TEXT,
       payment_payload JSONB DEFAULT '{}'::jsonb,
@@ -102,9 +102,41 @@ async function main() {
   `;
 
   await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS website_customer_id UUID`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS razorpay_order_id TEXT`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS razorpay_payment_id TEXT`;
 
+  // Migrate legacy PhonePe columns → Razorpay (idempotent; Neon-safe single statements)
+  const legacyCols = await sql`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'checkout_sessions'
+      AND column_name IN ('phonepe_merchant_txn_id', 'phonepe_txn_id')
+  `;
+  const legacyNames = new Set(
+    (legacyCols as Array<{ column_name: string }>).map((r) => r.column_name),
+  );
+
+  if (legacyNames.has('phonepe_merchant_txn_id')) {
+    await sql`
+      UPDATE checkout_sessions
+      SET razorpay_order_id = COALESCE(razorpay_order_id, phonepe_merchant_txn_id)
+      WHERE phonepe_merchant_txn_id IS NOT NULL
+    `;
+    await sql`ALTER TABLE checkout_sessions DROP COLUMN phonepe_merchant_txn_id`;
+  }
+  if (legacyNames.has('phonepe_txn_id')) {
+    await sql`
+      UPDATE checkout_sessions
+      SET razorpay_payment_id = COALESCE(razorpay_payment_id, phonepe_txn_id)
+      WHERE phonepe_txn_id IS NOT NULL
+    `;
+    await sql`ALTER TABLE checkout_sessions DROP COLUMN phonepe_txn_id`;
+  }
+
+  await sql`DROP INDEX IF EXISTS checkout_sessions_merchant_txn_idx`;
   await sql`CREATE INDEX IF NOT EXISTS checkout_sessions_status_idx ON checkout_sessions (status)`;
-  await sql`CREATE INDEX IF NOT EXISTS checkout_sessions_merchant_txn_idx ON checkout_sessions (phonepe_merchant_txn_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS checkout_sessions_razorpay_order_idx ON checkout_sessions (razorpay_order_id)`;
   await sql`CREATE INDEX IF NOT EXISTS checkout_sessions_customer_idx ON checkout_sessions (website_customer_id)`;
 
   console.log('Migration complete.');

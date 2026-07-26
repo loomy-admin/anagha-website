@@ -1,18 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { formatDisplayPrice, type CatalogItem } from '@/lib/erpCatalog';
 import {
+  addToCart,
   createCheckoutSession,
-  loadCartItem,
-  saveCartItem,
+  loadCart,
   type CheckoutCartItem,
-  type CheckoutSession,
 } from '@/lib/checkout';
 import { fetchMe, type WebsiteCustomer } from '@/lib/auth';
-import MockPaymentModal from '@/components/MockPaymentModal';
 
 async function loadItem(tag: string): Promise<CatalogItem | null> {
   try {
@@ -25,17 +23,26 @@ async function loadItem(tag: string): Promise<CatalogItem | null> {
   }
 }
 
+function toCartItem(loaded: CatalogItem): CheckoutCartItem {
+  return {
+    tag_number: loaded.tag_number,
+    name: loaded.name,
+    display_price: loaded.display_price,
+    image_url: loaded.image_url,
+    type_slug: loaded.group_slug || loaded.type_slug,
+  };
+}
+
 export default function CheckoutForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tagFromQuery = (searchParams.get('tag') || '').trim().toUpperCase();
 
-  const [item, setItem] = useState<CatalogItem | null>(null);
+  const [items, setItems] = useState<CatalogItem[]>([]);
   const [customer, setCustomer] = useState<WebsiteCustomer | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mockSession, setMockSession] = useState<CheckoutSession | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,42 +54,44 @@ export default function CheckoutForm() {
       const me = await fetchMe().catch(() => null);
       if (cancelled) return;
       if (!me) {
-        const cart = loadCartItem();
-        const tag = tagFromQuery || cart?.tag_number || '';
+        const cart = loadCart();
+        const tag = tagFromQuery || cart[0]?.tag_number || '';
         const next = tag
           ? `/checkout?tag=${encodeURIComponent(tag)}`
-          : '/checkout';
+          : cart.length
+            ? '/checkout'
+            : '/cart';
         router.replace(`/account/login?next=${encodeURIComponent(next)}`);
         return;
       }
       setCustomer(me);
 
-      const cart = loadCartItem();
-      const tag = tagFromQuery || cart?.tag_number || '';
-      if (!tag) {
-        setItem(null);
+      const tags = tagFromQuery
+        ? [tagFromQuery]
+        : loadCart().map((row) => row.tag_number);
+
+      if (!tags.length) {
+        setItems([]);
         setLoading(false);
         return;
       }
 
-      const loaded = await loadItem(tag);
+      const loadedRows = await Promise.all(tags.map((tag) => loadItem(tag)));
       if (cancelled) return;
-      if (!loaded) {
-        setItem(null);
-        setError('This item is no longer available.');
+
+      const available = loadedRows.filter((row): row is CatalogItem => Boolean(row));
+      if (!available.length) {
+        setItems([]);
+        setError('These items are no longer available.');
         setLoading(false);
         return;
       }
 
-      const cartItem: CheckoutCartItem = {
-        tag_number: loaded.tag_number,
-        name: loaded.name,
-        display_price: loaded.display_price,
-        image_url: loaded.image_url,
-        type_slug: loaded.group_slug || loaded.type_slug,
-      };
-      saveCartItem(cartItem);
-      setItem(loaded);
+      available.forEach((row) => addToCart(toCartItem(row)));
+      setItems(available);
+      if (available.length < tags.length) {
+        setError('Some items were unavailable and were removed from this checkout.');
+      }
       setLoading(false);
     }
 
@@ -92,28 +101,30 @@ export default function CheckoutForm() {
     };
   }, [tagFromQuery, router]);
 
+  const total = useMemo(
+    () =>
+      items.reduce((sum, item) => {
+        const price = Number(item.display_price);
+        return sum + (Number.isFinite(price) ? price : 0);
+      }, 0),
+    [items],
+  );
+
   async function onPay() {
-    if (!item || !customer || submitting) return;
+    if (!items.length || !customer || submitting) return;
     setSubmitting(true);
     setError(null);
 
     try {
       const { session, payment } = await createCheckoutSession({
-        tag_number: item.tag_number,
+        tag_numbers: items.map((item) => item.tag_number),
       });
 
-      if (payment.mode === 'mock') {
-        setMockSession(session);
-        setSubmitting(false);
-        return;
+      if (payment?.mode !== 'razorpay' || !session?.id) {
+        throw new Error('Razorpay checkout could not be started');
       }
 
-      if (payment.redirectUrl) {
-        window.location.href = payment.redirectUrl;
-        return;
-      }
-
-      throw new Error('Payment gateway did not return a redirect URL');
+      window.location.assign(`/checkout/pay?session=${encodeURIComponent(session.id)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Checkout failed');
       setSubmitting(false);
@@ -132,10 +143,10 @@ export default function CheckoutForm() {
     return null;
   }
 
-  if (!item) {
+  if (!items.length) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 text-center">
-        <h1 className="font-domine text-2xl text-[#032C5E] mb-3">Your bag is empty</h1>
+        <h1 className="font-domine text-2xl text-[#032C5E] mb-3">Your cart is empty</h1>
         <p className="text-sm text-gray-500 mb-8">
           Choose a piece from live inventory to continue.
         </p>
@@ -182,44 +193,40 @@ export default function CheckoutForm() {
             disabled={submitting}
             className="w-full sm:w-auto bg-[#f1592a] hover:bg-[#d94a1f] disabled:opacity-60 text-white font-bold text-[12px] uppercase tracking-widest px-10 py-3.5 rounded-full transition-colors"
           >
-            {submitting ? 'Reserving…' : 'Pay securely'}
+            {submitting ? 'Starting payment…' : 'Pay securely'}
           </button>
         </div>
 
         <aside className="lg:col-span-2">
           <div className="border border-gray-100 rounded-lg p-5 bg-[#fafafa]">
             <p className="text-[11px] uppercase tracking-widest text-gray-400 mb-4">Order summary</p>
-            <div className="flex gap-4">
-              <div className="w-24 h-24 bg-white rounded overflow-hidden flex items-center justify-center shrink-0">
-                {item.image_url ? (
-                  <img src={item.image_url} alt="" className="w-full h-full object-contain" />
-                ) : (
-                  <span className="text-[10px] text-gray-300">No image</span>
-                )}
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] text-gray-400 uppercase">Tag {item.tag_number}</p>
-                <p className="text-sm font-medium text-[#222] leading-snug mt-1">{item.name}</p>
-                <p className="text-base font-bold text-[#222] mt-2">
-                  {formatDisplayPrice(item.display_price)}
-                </p>
-              </div>
+            <div className="space-y-4">
+              {items.map((item) => (
+                <div key={item.tag_number} className="flex gap-4">
+                  <div className="w-20 h-20 bg-white rounded overflow-hidden flex items-center justify-center shrink-0">
+                    {item.image_url ? (
+                      <img src={item.image_url} alt="" className="w-full h-full object-contain" />
+                    ) : (
+                      <span className="text-[10px] text-gray-300">No image</span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-gray-400 uppercase">Tag {item.tag_number}</p>
+                    <p className="text-sm font-medium text-[#222] leading-snug mt-1">{item.name}</p>
+                    <p className="text-sm font-bold text-[#222] mt-2">
+                      {formatDisplayPrice(item.display_price)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between text-base font-bold text-[#222] border-t border-gray-200 pt-3 mt-5">
+              <span>Total</span>
+              <span>{formatDisplayPrice(total)}</span>
             </div>
           </div>
         </aside>
       </div>
-
-      {mockSession ? (
-        <MockPaymentModal
-          open
-          session={mockSession}
-          onClose={() => setMockSession(null)}
-          onPaid={(paid) => {
-            setMockSession(null);
-            router.push(`/checkout/thanks?session=${encodeURIComponent(paid.id)}`);
-          }}
-        />
-      ) : null}
     </div>
   );
 }

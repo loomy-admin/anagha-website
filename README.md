@@ -38,14 +38,17 @@ cp backend/.env.example backend/.env
 #   ERP_STORE_SLUG=<org-slug-from-octis>
 #   ERP_BRANCH_ID=<branch-uuid>
 #   WEBSTORE_SECRET=<same as ERP WEBSTORE_SECRET>
-#   PHONEPE_MODE=mock   # or sandbox with PhonePe UAT keys
+#   ERP_PUBLIC_SITE_URL=https://anagha.octis.in
+#   RAZORPAY_KEY_ID=rzp_test_...
+#   RAZORPAY_KEY_SECRET=...
+#   RAZORPAY_DISPLAY_NAME=Octis
 #   PUBLIC_BASE_URL=http://localhost:3000
 #   PUBLIC_API_BASE_URL=http://localhost:4001
 ```
 
-Jewellery catalog pages load **live available inventory** from Octis ERP via the Anagha BFF (`/api/catalog`). Checkout uses **Buy now** → reserve → PhonePe (mock/sandbox) → ERP sale bill via `/api/webstore`. Marketing CMS (hero/offers) still uses Neon. Each client website is an instance: change `ERP_STORE_SLUG` (and branding) for Sresta / other orgs.
+Jewellery catalog pages load **live available inventory** from Octis ERP via the Anagha BFF (`/api/catalog`). Checkout uses **Buy now** → reserve → redirect to `/checkout/pay` → **Razorpay Standard Checkout** (single payment UI) → `/checkout/thanks` → ERP sale bill (official ERP PDF via BFF `/api/site/invoice/{id}`). Marketing CMS (hero/offers) still uses Neon.
 
-Full V2 deploy notes live in the Octis ERP repo: `docs/V2_PHONEPE_WEBSTORE_CHECKOUT.md`.
+**Razorpay sandbox:** use [test cards](https://razorpay.com/docs/payments/payments/test-card-upi-details/) (e.g. `4111 1111 1111 1111`). Live keys (`rzp_live_…`) come later after account activation.
 
 ### 3. Database
 

@@ -131,8 +131,8 @@ export default function ProductEditor({
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center font-black text-navy uppercase tracking-widest animate-pulse">
-        Loading ERP item…
+      <div className="min-h-screen flex items-center justify-center" aria-busy="true" aria-label="Loading">
+        <span className="w-10 h-10 border-2 border-navy/15 border-t-navy rounded-full animate-spin" />
       </div>
     );
   }

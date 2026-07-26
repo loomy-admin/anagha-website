@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import {
   fetchCatalogFilters,
+  fetchGroupImages,
   groupImageForSlug,
   slugifyName,
   type CatalogFilterOption,
@@ -43,6 +44,7 @@ function sortByCountDesc(groups: CatalogFilterOption[]) {
 
 export default function Categories({ silverPlan }: Props) {
   const [groups, setGroups] = useState<CatalogFilterOption[]>([]);
+  const [imageOverrides, setImageOverrides] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
   const plan: PlanData = { ...SILVER_PLAN_DEFAULT, ...silverPlan };
@@ -51,8 +53,12 @@ export default function Categories({ silverPlan }: Props) {
     let cancelled = false;
     async function load() {
       try {
-        const payload = await fetchCatalogFilters();
+        const [payload, images] = await Promise.all([
+          fetchCatalogFilters(),
+          fetchGroupImages().catch(() => ({})),
+        ]);
         if (!cancelled) {
+          setImageOverrides(images);
           setGroups(sortByCountDesc(payload.filters?.group || []).slice(0, HOME_GRID_LIMIT));
         }
       } catch {
@@ -103,7 +109,7 @@ export default function Categories({ silverPlan }: Props) {
           >
             {groups.map((g, i) => {
               const slug = g.slug || slugifyName(g.name);
-              const img = groupImageForSlug(slug);
+              const img = groupImageForSlug(slug, imageOverrides);
               const isLeft = (i % 8) % 2 === 0;
 
               return (

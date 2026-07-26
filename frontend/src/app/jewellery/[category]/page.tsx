@@ -1,5 +1,3 @@
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
 import JewelleryListing from '@/components/JewelleryListing';
 
 export const dynamic = 'force-dynamic';
@@ -13,14 +11,20 @@ export async function generateMetadata({ params }: { params: Promise<{ category:
   };
 }
 
-export default async function CategoryPage({ params }: { params: Promise<{ category: string }> }) {
+export default async function CategoryPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ category: string }>;
+  searchParams: Promise<{ article?: string; type?: string }>;
+}) {
   const { category } = await params;
-
+  const sp = await searchParams;
   return (
-    <>
-      <Header />
-      <JewelleryListing category={category} />
-      <Footer />
-    </>
+    <JewelleryListing
+      category={category}
+      article={sp.article}
+      audience={sp.type}
+    />
   );
 }

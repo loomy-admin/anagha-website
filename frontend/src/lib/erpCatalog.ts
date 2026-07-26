@@ -96,9 +96,55 @@ const GROUP_IMAGE_BY_SLUG: Record<string, string> = {
   vaddanam: '/images/header/silver-vaddanam.png',
 };
 
-export function groupImageForSlug(slug: string | null | undefined) {
+export function groupImageForSlug(
+  slug: string | null | undefined,
+  overrides?: Record<string, string> | null,
+) {
   if (!slug) return '/images/category/silver_image.png';
-  return GROUP_IMAGE_BY_SLUG[slug] || '/images/category/silver_image.png';
+  const key = slug.toLowerCase();
+  const custom = overrides?.[key]?.trim();
+  if (custom) return custom;
+  return GROUP_IMAGE_BY_SLUG[key] || '/images/category/silver_image.png';
+}
+
+/** Admin / storefront overrides for ERP group tile images. */
+export async function fetchGroupImages() {
+  const res = await fetch('/api/site/group-images', { cache: 'no-store' });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || 'Failed to load group images');
+  }
+  const images =
+    body?.images && typeof body.images === 'object'
+      ? (body.images as Record<string, string>)
+      : {};
+  return images;
+}
+
+export async function uploadGroupImage(slug: string, file: File) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(
+    `/api/upload/group-images?slug=${encodeURIComponent(slug)}`,
+    { method: 'POST', body: fd, credentials: 'include' },
+  );
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || 'Upload failed');
+  }
+  return body as { success: boolean; slug: string; image: string; images: Record<string, string> };
+}
+
+export async function resetGroupImage(slug: string) {
+  const res = await fetch(
+    `/api/upload/group-images?slug=${encodeURIComponent(slug)}`,
+    { method: 'DELETE', credentials: 'include' },
+  );
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || 'Reset failed');
+  }
+  return body as { success: boolean; slug: string; images: Record<string, string> };
 }
 
 export function slugifyName(name: string) {

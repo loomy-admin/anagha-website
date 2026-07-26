@@ -5,19 +5,43 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { fetchCatalogFilters, type CatalogFilterOption } from '@/lib/erpCatalog';
 import { fetchMe, logoutAccount, type WebsiteCustomer } from '@/lib/auth';
+import { CART_CHANGED_EVENT, getCartCount } from '@/lib/checkout';
 
-type NavItem = { label: string; slug: string };
+type NavDropdown = {
+  articles: Array<{ name: string; slug?: string }>;
+  callout: { title: string; desc: string; image: string };
+};
+
+type NavItem = {
+  label: string;
+  slug: string;
+  dropdown?: NavDropdown | null;
+};
 
 const NAV_BAR_LIMIT = 8;
+
+/** Hardcoded for now — wiring TBD. */
+const PRICE_RANGES = [
+  { label: 'Below 10,000' },
+  { label: 'Between 10k-20k' },
+  { label: 'Between 20k-30k' },
+  { label: 'Between 30k-40k' },
+  { label: 'Between 40k-50k' },
+  { label: '50,000 and above' },
+];
 
 const SearchIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
     <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
   </svg>
 );
-const HeartIcon = () => (
+const BagIcon = () => (
   <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-    <path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m-3 0h13.5l-1.2 9H6.45l-1.2-9z"
+    />
   </svg>
 );
 const WhatsAppIcon = () => (
@@ -41,22 +65,109 @@ function sortByCountDesc(groups: CatalogFilterOption[]) {
   return [...groups].sort((a, b) => (b.count || 0) - (a.count || 0) || a.name.localeCompare(b.name));
 }
 
+type NavCache = {
+  navItems: NavItem[];
+  allGroups: Array<{ label: string; slug: string }>;
+  at: number;
+};
+const NAV_STORAGE_KEY = 'anagha_header_nav_v1';
+const ALL_JEWELLERY: NavItem = { label: 'ALL JEWELLERY', slug: 'all-jewellery', dropdown: null };
+let navCache: NavCache | null = null;
+/** undefined = not fetched yet; null = signed out */
+let customerCache: WebsiteCustomer | null | undefined = undefined;
+
+function readStoredNav(): NavCache | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(NAV_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as NavCache;
+    if (!Array.isArray(parsed?.navItems) || !parsed.navItems.length) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredNav(cache: NavCache) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify(cache));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+function readNavCache(): NavCache | null {
+  return navCache || readStoredNav();
+}
+
+function navFromHeaderGroups(selected: unknown): NavItem[] {
+  if (!Array.isArray(selected) || !selected.length) return [];
+  const picked: NavItem[] = [];
+  for (const row of selected) {
+    if (!row || typeof row !== 'object') continue;
+    const r = row as {
+      slug?: string;
+      label?: string;
+      dropdown?: NavDropdown | null;
+    };
+    const slug = String(r.slug || '')
+      .trim()
+      .toLowerCase();
+    const label = String(r.label || slug)
+      .trim()
+      .toUpperCase();
+    if (!slug) continue;
+    const dropdown =
+      r.dropdown && typeof r.dropdown === 'object'
+        ? {
+            articles: Array.isArray(r.dropdown.articles)
+              ? r.dropdown.articles
+                  .map((a) => ({
+                    name: String(a?.name || '').trim(),
+                    slug: a?.slug ? String(a.slug) : undefined,
+                  }))
+                  .filter((a) => a.name)
+              : [],
+            callout: {
+              title: String(r.dropdown.callout?.title || ''),
+              desc: String(r.dropdown.callout?.desc || ''),
+              image: String(r.dropdown.callout?.image || ''),
+            },
+          }
+        : null;
+    picked.push({ label, slug, dropdown });
+    if (picked.length >= NAV_BAR_LIMIT) break;
+  }
+  return picked;
+}
+
 export default function Header() {
   const router = useRouter();
+  const cachedNav = readNavCache();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [navItems, setNavItems] = useState<NavItem[]>([]);
-  const [allGroups, setAllGroups] = useState<NavItem[]>([]);
-  const [navReady, setNavReady] = useState(false);
-  const [customer, setCustomer] = useState<WebsiteCustomer | null>(null);
+  const [navItems, setNavItems] = useState<NavItem[]>(
+    () => cachedNav?.navItems || [ALL_JEWELLERY],
+  );
+  const [allGroups, setAllGroups] = useState<Array<{ label: string; slug: string }>>(
+    () => cachedNav?.allGroups || [],
+  );
+  const [customer, setCustomer] = useState<WebsiteCustomer | null>(
+    () => (customerCache === undefined ? null : customerCache),
+  );
+  const [cartCount, setCartCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     fetchMe()
       .then((me) => {
+        customerCache = me;
         if (!cancelled) setCustomer(me);
       })
       .catch(() => {
+        customerCache = null;
         if (!cancelled) setCustomer(null);
       });
     return () => {
@@ -64,9 +175,23 @@ export default function Header() {
     };
   }, []);
 
+  useEffect(() => {
+    function syncCart() {
+      setCartCount(getCartCount());
+    }
+    syncCart();
+    window.addEventListener(CART_CHANGED_EVENT, syncCart);
+    window.addEventListener('storage', syncCart);
+    return () => {
+      window.removeEventListener(CART_CHANGED_EVENT, syncCart);
+      window.removeEventListener('storage', syncCart);
+    };
+  }, []);
+
   async function onSignOut() {
     try {
       await logoutAccount();
+      customerCache = null;
       setCustomer(null);
       router.refresh();
     } catch {
@@ -76,26 +201,60 @@ export default function Header() {
 
   useEffect(() => {
     let cancelled = false;
+    const existing = readNavCache();
+    if (existing) {
+      setAllGroups(existing.allGroups);
+      setNavItems(existing.navItems);
+    }
 
     async function loadNav() {
       try {
-        const payload = await fetchCatalogFilters();
-        const groups = sortByCountDesc(payload.filters?.group || []);
+        // Admin-configured tabs only — do not block on ERP catalog.
+        const headerCfg = await fetch('/api/site/header', { cache: 'force-cache' })
+          .then((r) => (r.ok ? r.json() : { selectedGroups: [] }))
+          .catch(() => ({ selectedGroups: [] }));
         if (cancelled) return;
 
-        const mapped = groups.map(toNavItem).filter((g) => g.slug);
-        setAllGroups(mapped);
-        setNavItems([
-          ...mapped.slice(0, NAV_BAR_LIMIT),
-          { label: 'ALL JEWELLERY', slug: 'all-jewellery' },
-        ]);
-      } catch {
-        if (!cancelled) {
-          setAllGroups([]);
-          setNavItems([{ label: 'ALL JEWELLERY', slug: 'all-jewellery' }]);
+        let picked = navFromHeaderGroups(headerCfg?.selectedGroups);
+        let nextAll = existing?.allGroups || [];
+
+        // Paint admin tabs immediately — never wait on ERP catalog for the bar.
+        if (picked.length) {
+          const adminNav = [...picked, ALL_JEWELLERY];
+          setNavItems(adminNav);
+          const partial: NavCache = {
+            navItems: adminNav,
+            allGroups: nextAll,
+            at: Date.now(),
+          };
+          navCache = partial;
+          writeStoredNav(partial);
         }
-      } finally {
-        if (!cancelled) setNavReady(true);
+
+        // Catalog only fills All Jewellery + empty-admin fallback.
+        try {
+          const payload = await fetchCatalogFilters();
+          if (cancelled) return;
+          const groups = sortByCountDesc(payload.filters?.group || []);
+          const mapped = groups.map(toNavItem).filter((g) => g.slug);
+          nextAll = mapped.map((g) => ({ label: g.label, slug: g.slug }));
+          if (!picked.length) {
+            picked = mapped.slice(0, NAV_BAR_LIMIT).map((g) => ({ ...g, dropdown: null }));
+          }
+        } catch {
+          /* keep admin tabs even if catalog is slow/down */
+        }
+
+        const nextNav: NavItem[] = [...picked, ALL_JEWELLERY];
+        const cache: NavCache = { navItems: nextNav, allGroups: nextAll, at: Date.now() };
+        navCache = cache;
+        writeStoredNav(cache);
+        setAllGroups(nextAll);
+        setNavItems(nextNav);
+      } catch {
+        if (!cancelled && !readNavCache()) {
+          setNavItems([ALL_JEWELLERY]);
+        }
       }
     }
 
@@ -141,7 +300,14 @@ export default function Header() {
           />
         </Link>
         <div className="flex items-center gap-4 text-navy">
-          <SearchIcon />
+          <Link href="/cart" aria-label="Shopping cart" className="relative inline-flex">
+            <BagIcon />
+            {cartCount > 0 ? (
+              <span className="absolute -top-1 -right-2 min-w-[15px] h-[15px] px-0.5 rounded-full bg-[#f1592a] text-white text-[9px] flex items-center justify-center font-bold">
+                {cartCount > 9 ? '9+' : cartCount}
+              </span>
+            ) : null}
+          </Link>
         </div>
       </div>
 
@@ -164,11 +330,35 @@ export default function Header() {
             </button>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {!navReady ? (
-              <p className="px-6 py-4 text-[12px] text-gray-400">Loading categories…</p>
-            ) : (
-              <ul className="flex flex-col">
-                {allGroups.map((item) => (
+            <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap gap-4 text-[12px] font-semibold text-navy">
+              <Link href="/cart" onClick={() => setMobileMenuOpen(false)}>
+                Cart{cartCount > 0 ? ` (${cartCount})` : ''}
+              </Link>
+              {customer ? (
+                <>
+                  <Link href="/account/orders" onClick={() => setMobileMenuOpen(false)}>
+                    Orders
+                  </Link>
+                  <button type="button" onClick={() => { setMobileMenuOpen(false); onSignOut(); }}>
+                    Sign out
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link href="/account/login" onClick={() => setMobileMenuOpen(false)}>
+                    Sign in
+                  </Link>
+                  <Link href="/account/signup" onClick={() => setMobileMenuOpen(false)}>
+                    Sign up
+                  </Link>
+                </>
+              )}
+            </div>
+            <ul className="flex flex-col">
+                {(allGroups.length
+                  ? allGroups
+                  : navItems.filter((n) => n.slug !== 'all-jewellery')
+                ).map((item) => (
                   <li key={item.slug} className="border-b border-gray-50">
                     <Link
                       href={`/jewellery/${item.slug}`}
@@ -189,7 +379,6 @@ export default function Header() {
                   </Link>
                 </li>
               </ul>
-            )}
           </div>
         </div>
       )}
@@ -235,9 +424,17 @@ export default function Header() {
                       <span className={VDIV} />
                     </>
                   ) : null}
-                  <span className={`${ITEM3} text-navy font-semibold max-w-[120px] truncate`} title={customer.email}>
+                  <Link
+                    href="/account/orders"
+                    className={`${ITEM3} text-navy font-semibold max-w-[120px] truncate hover:text-[#f1592a]`}
+                    title={customer.email}
+                  >
                     {customer.name.split(' ')[0]}
-                  </span>
+                  </Link>
+                  <span className={VDIV} />
+                  <Link href="/account/orders" className={`${ITEM4} hover:text-navy`}>
+                    Orders
+                  </Link>
                   <span className={VDIV} />
                   <button type="button" onClick={onSignOut} className={`${ITEM4} hover:text-navy`}>
                     Sign out
@@ -268,14 +465,16 @@ export default function Header() {
                 </span>
               </Link>
               <span className={VDIV} />
-              <div className={`${ITEM3} relative`}>
-                <div className="relative inline-flex text-[#ff4d8d]">
-                  <HeartIcon />
-                  <span className="absolute -top-1 -right-2 w-[15px] h-[15px] rounded-full border border-[#ff4d8d] bg-white text-[9px] flex items-center justify-center font-bold">
-                    0
-                  </span>
-                </div>
-              </div>
+              <Link href="/cart" className={`${ITEM3} relative`} aria-label="Shopping cart">
+                <span className="relative inline-flex text-navy">
+                  <BagIcon />
+                  {cartCount > 0 ? (
+                    <span className="absolute -top-1 -right-2 min-w-[15px] h-[15px] px-0.5 rounded-full bg-[#f1592a] text-white text-[9px] flex items-center justify-center font-bold">
+                      {cartCount > 9 ? '9+' : cartCount}
+                    </span>
+                  ) : null}
+                </span>
+              </Link>
             </div>
           </div>
         </div>
@@ -299,11 +498,11 @@ export default function Header() {
         </div>
 
         <ul className="flex items-center h-full w-full justify-center gap-2 xl:gap-5 list-none pl-10">
-          {!navReady ? (
-            <li className="text-white/50 text-[11px] tracking-wide">Loading…</li>
-          ) : (
-            navItems.map((item) => {
+          {navItems.map((item) => {
               const isAll = item.slug === 'all-jewellery';
+              const hasMega = !isAll;
+              const articles = item.dropdown?.articles || [];
+              const callout = item.dropdown?.callout;
               return (
                 <li
                   key={item.slug}
@@ -314,7 +513,7 @@ export default function Header() {
                     className="flex items-center gap-1 h-full"
                   >
                     {item.label}
-                    {isAll ? <span className="text-[13px] xl:text-[15px] leading-none">▾</span> : null}
+                    <span className="text-[13px] xl:text-[15px] leading-none">▾</span>
                   </Link>
 
                   {isAll && allGroups.length > 0 ? (
@@ -344,10 +543,78 @@ export default function Header() {
                       </div>
                     </div>
                   ) : null}
+
+                  {hasMega ? (
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 bg-white shadow-2xl w-[640px] max-w-[90vw] py-6 rounded-b-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] border-t-2 border-navy">
+                      <div className="px-8 grid grid-cols-2 gap-10">
+                        <div>
+                          <h4 className="text-navy font-bold text-[14px] mb-3 border-b border-gray-200 pb-2">
+                            By Price Range
+                          </h4>
+                          <ul className="space-y-2.5">
+                            {PRICE_RANGES.map((p) => (
+                              <li key={p.label}>
+                                <span className="text-[#334155] text-[13px] cursor-default">
+                                  {p.label}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                          <Link
+                            href={`/jewellery/${item.slug}`}
+                            className="inline-flex mt-6 border border-navy text-navy text-[11px] font-bold uppercase tracking-wider px-4 py-2 rounded-md hover:bg-navy hover:text-white transition-colors"
+                          >
+                            View All {item.label}
+                          </Link>
+                        </div>
+                        <div>
+                          <h4 className="text-navy font-bold text-[14px] mb-3 border-b border-gray-200 pb-2">
+                            By Categories
+                          </h4>
+                          {articles.length ? (
+                            <ul className="space-y-2.5 mb-6">
+                              {articles.map((a) => (
+                                <li key={a.name}>
+                                  <Link
+                                    href={`/jewellery/${item.slug}?article=${encodeURIComponent(a.name)}`}
+                                    className="text-[#334155] text-[13px] hover:text-[#f1592a] transition-colors"
+                                  >
+                                    {a.name}
+                                  </Link>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-[12px] text-gray-400 mb-6">No articles configured</p>
+                          )}
+                          {callout && (callout.title || callout.image || callout.desc) ? (
+                            <div className="border-t border-gray-200 pt-4 flex items-center gap-4">
+                              <div className="min-w-0 flex-1">
+                                {callout.title ? (
+                                  <p className="text-navy font-bold text-[14px] leading-snug">
+                                    {callout.title}
+                                  </p>
+                                ) : null}
+                                {callout.desc ? (
+                                  <p className="text-[12px] text-gray-500 mt-1">{callout.desc}</p>
+                                ) : null}
+                              </div>
+                              {callout.image ? (
+                                <img
+                                  src={callout.image}
+                                  alt=""
+                                  className="w-20 h-20 object-contain shrink-0"
+                                />
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                 </li>
               );
-            })
-          )}
+            })}
         </ul>
       </nav>
     </>

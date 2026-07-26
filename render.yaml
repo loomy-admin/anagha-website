@@ -28,23 +28,15 @@ services:
         sync: false
       - key: WEBSTORE_SECRET
         sync: false
+      - key: ERP_PUBLIC_SITE_URL
+        sync: false
       - key: PUBLIC_BASE_URL
         sync: false
       - key: PUBLIC_API_BASE_URL
         sync: false
-      - key: PHONEPE_MODE
+      - key: RAZORPAY_KEY_ID
         sync: false
-      - key: PHONEPE_CLIENT_ID
+      - key: RAZORPAY_KEY_SECRET
         sync: false
-      - key: PHONEPE_CLIENT_SECRET
-        sync: false
-      - key: PHONEPE_CLIENT_VERSION
-        sync: false
-      - key: PHONEPE_BASE_URL
-        sync: false
-      - key: PHONEPE_MERCHANT_ID
-        sync: false
-      - key: PHONEPE_SALT_KEY
-        sync: false
-      - key: PHONEPE_SALT_INDEX
+      - key: RAZORPAY_DISPLAY_NAME
         sync: false

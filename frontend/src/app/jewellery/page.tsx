@@ -1,5 +1,3 @@
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
 import JewelleryListing from '@/components/JewelleryListing';
 
 export const metadata = {
@@ -7,12 +5,11 @@ export const metadata = {
   description: 'Explore our complete collection of exquisite jewellery.',
 };
 
-export default function JewelleryPage() {
-  return (
-    <>
-      <Header />
-      <JewelleryListing />
-      <Footer />
-    </>
-  );
+export default async function JewelleryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ type?: string; article?: string }>;
+}) {
+  const sp = await searchParams;
+  return <JewelleryListing audience={sp.type} article={sp.article} />;
 }

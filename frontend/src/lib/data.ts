@@ -701,7 +701,7 @@ export const CURATED_STYLES_CARDS = [
       '/images/curated/layered_necklace_3.png',
       '/images/curated/layered_necklace.png',
     ],
-    link: '/jewellery/necklaces'
+    link: '/jewellery/necklace',
   },
   {
     title: 'Coveted Styles',
@@ -712,7 +712,7 @@ export const CURATED_STYLES_CARDS = [
       '/images/curated/ear_rings_4.png',
       '/images/curated/pendant_1.png',
     ],
-    link: '/jewellery/bracelets'
+    link: '/jewellery/bracelet',
   },
   {
     title: 'Anagha Man',
@@ -723,8 +723,8 @@ export const CURATED_STYLES_CARDS = [
       '/images/curated/men_jewellery_3.png',
       '/images/curated/men_jewellery_4.png',
     ],
-    link: '/jewellery/mens-jewellery'
-  }
+    link: '/jewellery?type=MEN',
+  },
 ];
 
 export const DESIGN_LED_ITEMS = [
@@ -732,18 +732,18 @@ export const DESIGN_LED_ITEMS = [
     largeImg: '/images/design-led/earrings_2.webp',
     smallImg: '/images/design-led/earrings_1.png',
     label: 'Earrings',
-    slug: 'earrings'
+    slug: 'ear-rings',
   },
   {
     largeImg: '/images/design-led/bangles_2.webp',
     smallImg: '/images/design-led/bangles_1.png',
     label: 'Bangles',
-    slug: 'bangles'
+    slug: 'bangles',
   },
   {
     largeImg: '/images/design-led/necklace_2.webp',
     smallImg: '/images/design-led/necklace_1.png',
     label: 'Necklace',
-    slug: 'necklaces'
-  }
+    slug: 'necklace',
+  },
 ];

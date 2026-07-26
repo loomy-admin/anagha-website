@@ -1,5 +1,3 @@
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
 import ProductGallery from '@/components/ProductGallery';
 import ProductDetailPanel from '@/components/ProductDetailPanel';
 import Link from 'next/link';
@@ -55,41 +53,37 @@ export default async function ProductDetailPage({
       : [];
 
   return (
-    <>
-      <Header />
-      <main className="w-full bg-white min-h-screen font-sans pb-20">
-        <div className="max-w-[1400px] mx-auto px-4 md:px-8 pt-6 pb-2">
-          <p className="text-[11px] text-gray-400 uppercase tracking-widest">
-            <Link href="/" className="hover:text-[#f1592a] transition-colors">Home</Link>
-            {' '}/ <Link href="/jewellery" className="hover:text-[#f1592a] transition-colors">Jewellery</Link>
-            {' '}/{' '}
-            <Link href={`/jewellery/${groupSlug}`} className="hover:text-[#f1592a] transition-colors capitalize">
-              {(product.group || category).replace(/-/g, ' ')}
-            </Link>
-            {' '}/ <span className="text-gray-600">{product.name}</span>
-          </p>
-        </div>
+    <main className="w-full bg-white min-h-screen font-sans pb-20">
+      <div className="max-w-[1400px] mx-auto px-4 md:px-8 pt-6 pb-2">
+        <p className="text-[11px] text-gray-400 uppercase tracking-widest">
+          <Link href="/" className="hover:text-[#f1592a] transition-colors">Home</Link>
+          {' '}/ <Link href="/jewellery" className="hover:text-[#f1592a] transition-colors">Jewellery</Link>
+          {' '}/{' '}
+          <Link href={`/jewellery/${groupSlug}`} className="hover:text-[#f1592a] transition-colors capitalize">
+            {(product.group || category).replace(/-/g, ' ')}
+          </Link>
+          {' '}/ <span className="text-gray-600">{product.name}</span>
+        </p>
+      </div>
 
-        <div className="max-w-[1400px] mx-auto px-4 md:px-8 mt-8">
-          <div className="flex flex-col lg:flex-row gap-12 lg:gap-20">
-            <div className="w-full lg:w-[45%] flex flex-col items-center">
-              <ProductGallery images={gallery} alt={product.name} />
-            </div>
-
-            <ProductDetailPanel
-              name={product.name}
-              tagNumber={product.tag_number}
-              displayPrice={product.display_price}
-              imageUrl={product.image_url}
-              groupSlug={groupSlug}
-              netWeight={product.net_weight}
-              grossWeight={product.gross_weight}
-              description={product.description}
-            />
+      <div className="max-w-[1400px] mx-auto px-4 md:px-8 mt-8">
+        <div className="flex flex-col lg:flex-row gap-12 lg:gap-20">
+          <div className="w-full lg:w-[45%] flex flex-col items-center">
+            <ProductGallery images={gallery} alt={product.name} />
           </div>
+
+          <ProductDetailPanel
+            name={product.name}
+            tagNumber={product.tag_number}
+            displayPrice={product.display_price}
+            imageUrl={product.image_url}
+            groupSlug={groupSlug}
+            netWeight={product.net_weight}
+            grossWeight={product.gross_weight}
+            description={product.description}
+          />
         </div>
-      </main>
-      <Footer />
-    </>
+      </div>
+    </main>
   );
 }
