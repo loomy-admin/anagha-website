@@ -40,6 +40,17 @@ function emptyDropdown(): HeaderSelectedGroup['dropdown'] {
   };
 }
 
+function legacyArticlesFromDropdown(dropdownRaw: Record<string, unknown>): unknown[] {
+  if (Array.isArray(dropdownRaw.articles)) return dropdownRaw.articles;
+  // Legacy seed shape: dropdown.categories.items[{ name, link }]
+  const categories =
+    dropdownRaw.categories && typeof dropdownRaw.categories === 'object'
+      ? (dropdownRaw.categories as Record<string, unknown>)
+      : null;
+  if (categories && Array.isArray(categories.items)) return categories.items;
+  return [];
+}
+
 function normalizeGroup(raw: unknown): HeaderSelectedGroup | null {
   if (!raw || typeof raw !== 'object') return null;
   const row = raw as Record<string, unknown>;
@@ -49,13 +60,13 @@ function normalizeGroup(raw: unknown): HeaderSelectedGroup | null {
   const label = String(row.label || row.name || slug)
     .trim()
     .toUpperCase();
-  if (!slug) return null;
+  if (!slug || slug === 'all-jewellery') return null;
 
   const dropdownRaw =
     row.dropdown && typeof row.dropdown === 'object'
       ? (row.dropdown as Record<string, unknown>)
       : {};
-  const articlesRaw = Array.isArray(dropdownRaw.articles) ? dropdownRaw.articles : [];
+  const articlesRaw = legacyArticlesFromDropdown(dropdownRaw);
   const calloutRaw =
     dropdownRaw.callout && typeof dropdownRaw.callout === 'object'
       ? (dropdownRaw.callout as Record<string, unknown>)
@@ -93,24 +104,36 @@ function normalizeGroup(raw: unknown): HeaderSelectedGroup | null {
   };
 }
 
-export async function getHeaderSelection(): Promise<HeaderContent> {
-  const header = await getContent<HeaderContent & { navItems?: unknown }>('header', {
-    selectedGroups: [],
-  });
-  const selected = Array.isArray(header.selectedGroups) ? header.selectedGroups : [];
+function collectGroups(rows: unknown[]): HeaderSelectedGroup[] {
   const out: HeaderSelectedGroup[] = [];
   const seen = new Set<string>();
-  for (const row of selected) {
+  for (const row of rows) {
     const g = normalizeGroup(row);
     if (!g || seen.has(g.slug)) continue;
     seen.add(g.slug);
     out.push(g);
     if (out.length >= MAX_HEADER_GROUPS) break;
   }
+  return out;
+}
+
+export async function getHeaderSelection(): Promise<HeaderContent> {
+  const header = await getContent<HeaderContent & { navItems?: unknown }>('header', {
+    selectedGroups: [],
+  });
+  const selected = Array.isArray(header.selectedGroups) ? header.selectedGroups : [];
+  let out = collectGroups(selected);
+
+  // Legacy DB/seed used { navItems } with categories.items — map when selectedGroups is empty.
+  if (!out.length && Array.isArray(header.navItems)) {
+    out = collectGroups(header.navItems);
+  }
+
   return { selectedGroups: out };
 }
 
 router.get('/', async (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   res.json(await getHeaderSelection());
 });
 
@@ -150,16 +173,7 @@ router.post(
       return res.status(400).json({ error: 'Expected selectedGroups array' });
     }
 
-    const selectedGroups: HeaderSelectedGroup[] = [];
-    const seen = new Set<string>();
-    for (const row of raw) {
-      const g = normalizeGroup(row);
-      if (!g || seen.has(g.slug)) continue;
-      seen.add(g.slug);
-      selectedGroups.push(g);
-      if (selectedGroups.length >= MAX_HEADER_GROUPS) break;
-    }
-
+    const selectedGroups = collectGroups(raw);
     await setContent('header', { selectedGroups });
     res.json({ success: true, selectedGroups });
   } catch (err) {

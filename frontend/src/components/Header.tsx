@@ -6,6 +6,13 @@ import { useRouter } from 'next/navigation';
 import { fetchCatalogFilters, type CatalogFilterOption } from '@/lib/erpCatalog';
 import { fetchMe, logoutAccount, type WebsiteCustomer } from '@/lib/auth';
 import { CART_CHANGED_EVENT, getCartCount } from '@/lib/checkout';
+import {
+  HEADER_NAV_INVALIDATE_EVENT,
+  NAV_STORAGE_KEY,
+  getHeaderNavMemoryCache,
+  setHeaderNavMemoryCache,
+  clearHeaderNavStorage,
+} from '@/lib/headerNavCache';
 
 type NavDropdown = {
   articles: Array<{ name: string; slug?: string }>;
@@ -70,9 +77,7 @@ type NavCache = {
   allGroups: Array<{ label: string; slug: string }>;
   at: number;
 };
-const NAV_STORAGE_KEY = 'anagha_header_nav_v1';
 const ALL_JEWELLERY: NavItem = { label: 'ALL JEWELLERY', slug: 'all-jewellery', dropdown: null };
-let navCache: NavCache | null = null;
 /** undefined = not fetched yet; null = signed out */
 let customerCache: WebsiteCustomer | null | undefined = undefined;
 
@@ -90,6 +95,7 @@ function readStoredNav(): NavCache | null {
 }
 
 function writeStoredNav(cache: NavCache) {
+  setHeaderNavMemoryCache(cache);
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify(cache));
@@ -99,7 +105,27 @@ function writeStoredNav(cache: NavCache) {
 }
 
 function readNavCache(): NavCache | null {
-  return navCache || readStoredNav();
+  return getHeaderNavMemoryCache<NavCache>() || readStoredNav();
+}
+
+function articlesFromDropdown(dd: Record<string, unknown> | null): Array<{ name: string; slug?: string }> {
+  if (!dd) return [];
+  const raw = Array.isArray(dd.articles)
+    ? dd.articles
+    : dd.categories &&
+        typeof dd.categories === 'object' &&
+        Array.isArray((dd.categories as { items?: unknown }).items)
+      ? ((dd.categories as { items: unknown[] }).items)
+      : [];
+  return raw
+    .map((a) => {
+      if (!a || typeof a !== 'object') return null;
+      const name = String((a as { name?: string }).name || '').trim();
+      if (!name) return null;
+      const slug = (a as { slug?: string }).slug ? String((a as { slug?: string }).slug) : undefined;
+      return { name, slug };
+    })
+    .filter(Boolean) as Array<{ name: string; slug?: string }>;
 }
 
 function navFromHeaderGroups(selected: unknown): NavItem[] {
@@ -107,11 +133,7 @@ function navFromHeaderGroups(selected: unknown): NavItem[] {
   const picked: NavItem[] = [];
   for (const row of selected) {
     if (!row || typeof row !== 'object') continue;
-    const r = row as {
-      slug?: string;
-      label?: string;
-      dropdown?: NavDropdown | null;
-    };
+    const r = row as Record<string, unknown>;
     const slug = String(r.slug || '')
       .trim()
       .toLowerCase();
@@ -119,24 +141,24 @@ function navFromHeaderGroups(selected: unknown): NavItem[] {
       .trim()
       .toUpperCase();
     if (!slug) continue;
-    const dropdown =
+    const dd =
       r.dropdown && typeof r.dropdown === 'object'
-        ? {
-            articles: Array.isArray(r.dropdown.articles)
-              ? r.dropdown.articles
-                  .map((a) => ({
-                    name: String(a?.name || '').trim(),
-                    slug: a?.slug ? String(a.slug) : undefined,
-                  }))
-                  .filter((a) => a.name)
-              : [],
-            callout: {
-              title: String(r.dropdown.callout?.title || ''),
-              desc: String(r.dropdown.callout?.desc || ''),
-              image: String(r.dropdown.callout?.image || ''),
-            },
-          }
+        ? (r.dropdown as Record<string, unknown>)
         : null;
+    const callout =
+      dd?.callout && typeof dd.callout === 'object'
+        ? (dd.callout as Record<string, unknown>)
+        : {};
+    const dropdown = dd
+      ? {
+          articles: articlesFromDropdown(dd),
+          callout: {
+            title: String(callout.title || ''),
+            desc: String(callout.desc || ''),
+            image: String(callout.image || ''),
+          },
+        }
+      : null;
     picked.push({ label, slug, dropdown });
     if (picked.length >= NAV_BAR_LIMIT) break;
   }
@@ -209,8 +231,8 @@ export default function Header() {
 
     async function loadNav() {
       try {
-        // Admin-configured tabs only — do not block on ERP catalog.
-        const headerCfg = await fetch('/api/site/header', { cache: 'force-cache' })
+        // Always revalidate — admin header saves must show up immediately.
+        const headerCfg = await fetch('/api/site/header', { cache: 'no-store' })
           .then((r) => (r.ok ? r.json() : { selectedGroups: [] }))
           .catch(() => ({ selectedGroups: [] }));
         if (cancelled) return;
@@ -222,13 +244,11 @@ export default function Header() {
         if (picked.length) {
           const adminNav = [...picked, ALL_JEWELLERY];
           setNavItems(adminNav);
-          const partial: NavCache = {
+          writeStoredNav({
             navItems: adminNav,
             allGroups: nextAll,
             at: Date.now(),
-          };
-          navCache = partial;
-          writeStoredNav(partial);
+          });
         }
 
         // Catalog only fills All Jewellery + empty-admin fallback.
@@ -246,9 +266,7 @@ export default function Header() {
         }
 
         const nextNav: NavItem[] = [...picked, ALL_JEWELLERY];
-        const cache: NavCache = { navItems: nextNav, allGroups: nextAll, at: Date.now() };
-        navCache = cache;
-        writeStoredNav(cache);
+        writeStoredNav({ navItems: nextNav, allGroups: nextAll, at: Date.now() });
         setAllGroups(nextAll);
         setNavItems(nextNav);
       } catch {
@@ -258,9 +276,16 @@ export default function Header() {
       }
     }
 
+    function onInvalidate() {
+      clearHeaderNavStorage();
+      void loadNav();
+    }
+
     loadNav();
+    window.addEventListener(HEADER_NAV_INVALIDATE_EVENT, onInvalidate);
     return () => {
       cancelled = true;
+      window.removeEventListener(HEADER_NAV_INVALIDATE_EVENT, onInvalidate);
     };
   }, []);
 

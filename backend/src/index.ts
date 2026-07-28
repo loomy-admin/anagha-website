@@ -51,6 +51,7 @@ app.get('/health', (_req, res) => {
 /** Public storefront header tabs (admin-picked ERP groups). */
 app.get('/api/site/header', async (_req, res) => {
   try {
+    res.setHeader('Cache-Control', 'no-store');
     res.json(await getHeaderSelection());
   } catch (err) {
     console.error('[site/header]', err);

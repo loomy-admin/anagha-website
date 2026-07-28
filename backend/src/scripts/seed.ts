@@ -6,7 +6,7 @@ import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
-import { DEFAULT_JEWELLERY_CATEGORIES, DEFAULT_NAV_ITEMS, DEFAULT_PLANS } from '../lib/defaults.js';
+import { DEFAULT_JEWELLERY_CATEGORIES, DEFAULT_PLANS } from '../lib/defaults.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -45,7 +45,8 @@ async function main() {
     ['silverPlan', meta.silverPlan ?? DEFAULT_PLANS.silver],
     ['designLedLabels', meta.designLedLabels ?? ['Earrings', 'Bangles', 'Necklace']],
     ['designLedImages', meta.designLedImages ?? new Array(6).fill(null)],
-    ['header', meta.header ?? { navItems: DEFAULT_NAV_ITEMS }],
+    // Canonical shape is selectedGroups; empty ⇒ storefront falls back to top ERP groups.
+    ['header', meta.header ?? { selectedGroups: [] }],
     ['offers', meta.offers ?? []],
     ['collections', meta.collections ?? [null, null, null]],
     ['collectionsBtnLink', meta.collectionsBtnLink ?? '#'],

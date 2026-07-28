@@ -6,6 +6,7 @@ import {
   slugifyName,
   type CatalogFilterOption,
 } from '@/lib/erpCatalog';
+import { invalidateHeaderNavCache } from '@/lib/headerNavCache';
 
 const MAX_HEADER_TABS = 8;
 const MAX_ARTICLES = 5;
@@ -247,12 +248,8 @@ export default function HeaderNavPicker() {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || 'Save failed');
-      try {
-        localStorage.removeItem('anagha_header_nav_v1');
-      } catch {
-        /* ignore */
-      }
-      setSavedMsg('Header saved.');
+      invalidateHeaderNavCache();
+      setSavedMsg('Header saved. Storefront nav will refresh immediately.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
     } finally {
@@ -267,6 +264,7 @@ export default function HeaderNavPicker() {
     try {
       const res = await fetch('/api/upload/header', { method: 'DELETE' });
       if (!res.ok) throw new Error('Reset failed');
+      invalidateHeaderNavCache();
       setSelected(allGroups.slice(0, MAX_HEADER_TABS).map((g) => toTab(g)));
       setExpanded(null);
       setSavedMsg('Reset to top categories by stock.');
