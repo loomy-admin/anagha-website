@@ -23,7 +23,7 @@ export default function BillFrame({ billId, billNumber, size = 'hero' }: Props) 
           href={pageUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[11px] font-semibold uppercase tracking-wide text-[#2e6da4] hover:underline"
+          className="text-[11px] font-semibold uppercase tracking-wide text-[#032C5E] hover:underline"
         >
           Open in new tab
         </a>

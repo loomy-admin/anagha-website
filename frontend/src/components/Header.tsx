@@ -1,11 +1,13 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { fetchCatalogFilters, type CatalogFilterOption } from '@/lib/erpCatalog';
 import { fetchMe, logoutAccount, type WebsiteCustomer } from '@/lib/auth';
 import { CART_CHANGED_EVENT, getCartCount } from '@/lib/checkout';
+import { WISHLIST_CHANGED_EVENT, getWishlistCount } from '@/lib/wishlist';
+import SearchSuggestions from './SearchSuggestions';
 import {
   HEADER_NAV_INVALIDATE_EVENT,
   NAV_STORAGE_KEY,
@@ -29,17 +31,22 @@ const NAV_BAR_LIMIT = 8;
 
 /** Hardcoded for now — wiring TBD. */
 const PRICE_RANGES = [
-  { label: 'Below 10,000' },
-  { label: 'Between 10k-20k' },
-  { label: 'Between 20k-30k' },
-  { label: 'Between 30k-40k' },
-  { label: 'Between 40k-50k' },
-  { label: '50,000 and above' },
+  { label: 'Below 10,000', max: 10000 },
+  { label: 'Between 10k-20k', min: 10000, max: 20000 },
+  { label: 'Between 20k-30k', min: 20000, max: 30000 },
+  { label: 'Between 30k-40k', min: 30000, max: 40000 },
+  { label: 'Between 40k-50k', min: 40000, max: 50000 },
+  { label: '50,000 and above', min: 50000 },
 ];
 
 const SearchIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
     <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+  </svg>
+);
+const HeartIcon = () => (
+  <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
   </svg>
 );
 const BagIcon = () => (
@@ -167,19 +174,67 @@ function navFromHeaderGroups(selected: unknown): NavItem[] {
 
 export default function Header() {
   const router = useRouter();
-  const cachedNav = readNavCache();
+  const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [navItems, setNavItems] = useState<NavItem[]>(
-    () => cachedNav?.navItems || [ALL_JEWELLERY],
-  );
-  const [allGroups, setAllGroups] = useState<Array<{ label: string; slug: string }>>(
-    () => cachedNav?.allGroups || [],
-  );
-  const [customer, setCustomer] = useState<WebsiteCustomer | null>(
-    () => (customerCache === undefined ? null : customerCache),
-  );
+  const [navItems, setNavItems] = useState<NavItem[]>([ALL_JEWELLERY]);
+  const [allGroups, setAllGroups] = useState<Array<{ label: string; slug: string }>>([]);
+  const [customer, setCustomer] = useState<WebsiteCustomer | null>(null);
   const [cartCount, setCartCount] = useState(0);
+  const [wishlistCount, setWishlistCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const desktopSearchRef = useRef<HTMLDivElement>(null);
+  const mobileSearchRef = useRef<HTMLDivElement>(null);
+
+  const closeSuggestions = useCallback(() => setSuggestionsOpen(false), []);
+
+  const onSuggestionNavigate = useCallback(
+    (href: string) => {
+      setSuggestionsOpen(false);
+      setSearchQuery('');
+      setMobileMenuOpen(false);
+      router.push(href);
+    },
+    [router],
+  );
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+    setSuggestionsOpen(false);
+    // Only clear search input if we aren't explicitly on a search results page
+    if (typeof window !== 'undefined' && !window.location.search.includes('search=')) {
+      setSearchQuery('');
+    }
+  }, [pathname]);
+
+  function onSearchSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSuggestionsOpen(false);
+    const q = searchQuery.trim();
+    setMobileMenuOpen(false);
+    if (!q) {
+      router.push('/jewellery');
+      return;
+    }
+    router.push(`/jewellery?search=${encodeURIComponent(q)}`);
+  }
+
+  function onClearSearch() {
+    setSearchQuery('');
+    setSuggestionsOpen(false);
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/jewellery') && window.location.search.includes('search=')) {
+      router.push('/jewellery');
+    }
+  }
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const s = sp.get('search');
+      if (s) setSearchQuery(s);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -201,11 +256,17 @@ export default function Header() {
     function syncCart() {
       setCartCount(getCartCount());
     }
+    function syncWishlist() {
+      setWishlistCount(getWishlistCount());
+    }
     syncCart();
+    syncWishlist();
     window.addEventListener(CART_CHANGED_EVENT, syncCart);
+    window.addEventListener(WISHLIST_CHANGED_EVENT, syncWishlist);
     window.addEventListener('storage', syncCart);
     return () => {
       window.removeEventListener(CART_CHANGED_EVENT, syncCart);
+      window.removeEventListener(WISHLIST_CHANGED_EVENT, syncWishlist);
       window.removeEventListener('storage', syncCart);
     };
   }, []);
@@ -298,41 +359,95 @@ export default function Header() {
   return (
     <>
       {/* Mobile header */}
-      <div className="flex lg:hidden items-center justify-between px-4 h-16 bg-white shrink-0 sticky top-0 z-[100] shadow-sm">
-        <div className="flex items-center gap-3">
-          <button aria-label="Menu" className="text-navy" onClick={() => setMobileMenuOpen(true)}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <div className="w-7 h-7 rounded-full overflow-hidden border border-gray-300 flex items-center justify-center bg-white shrink-0">
-            <img
-              src="/images/logo_icon.png"
-              alt="Logo"
-              className="w-full h-full object-contain [clip-path:circle(47%)] scale-[0.85]"
+      <div className="flex flex-col lg:hidden bg-white shrink-0 sticky top-0 z-[100] shadow-sm">
+        <div className="flex items-center justify-between px-4 h-16">
+          <div className="flex items-center gap-3">
+            <button aria-label="Menu" className="text-navy" onClick={() => setMobileMenuOpen(true)}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <div className="w-7 h-7 rounded-full overflow-hidden border border-gray-300 flex items-center justify-center bg-white shrink-0">
+              <img
+                src="/images/logo_icon.png"
+                alt="Logo"
+                className="w-full h-full object-contain [clip-path:circle(47%)] scale-[0.85]"
+              />
+            </div>
+          </div>
+          <Link href="/" className="flex items-center">
+            <Image
+              src="/images/brand_logo.png"
+              alt="Anagha"
+              width={120}
+              height={40}
+              className="h-10 w-auto object-contain [clip-path:inset(1px_4px)]"
+              style={{ width: 'auto' }}
+              priority
             />
+          </Link>
+          <div className="flex items-center gap-4 text-navy">
+            <Link href="/wishlist" aria-label="Wishlist" className="relative inline-flex hover:text-coral transition-colors">
+              <HeartIcon />
+              {wishlistCount > 0 ? (
+                <span className="absolute -top-1 -right-2 min-w-[15px] h-[15px] px-0.5 rounded-full bg-[#f1592a] text-white text-[9px] flex items-center justify-center font-bold">
+                  {wishlistCount > 9 ? '9+' : wishlistCount}
+                </span>
+              ) : null}
+            </Link>
+            <Link href="/cart" aria-label="Shopping cart" className="relative inline-flex hover:text-coral transition-colors">
+              <BagIcon />
+              {cartCount > 0 ? (
+                <span className="absolute -top-1 -right-2 min-w-[15px] h-[15px] px-0.5 rounded-full bg-[#f1592a] text-white text-[9px] flex items-center justify-center font-bold">
+                  {cartCount > 9 ? '9+' : cartCount}
+                </span>
+              ) : null}
+            </Link>
           </div>
         </div>
-        <Link href="/" className="flex items-center">
-          <Image
-            src="/images/brand_logo.png"
-            alt="Anagha"
-            width={120}
-            height={40}
-            className="h-10 w-auto object-contain [clip-path:inset(1px_4px)]"
-            style={{ width: 'auto' }}
-            priority
-          />
-        </Link>
-        <div className="flex items-center gap-4 text-navy">
-          <Link href="/cart" aria-label="Shopping cart" className="relative inline-flex">
-            <BagIcon />
-            {cartCount > 0 ? (
-              <span className="absolute -top-1 -right-2 min-w-[15px] h-[15px] px-0.5 rounded-full bg-[#f1592a] text-white text-[9px] flex items-center justify-center font-bold">
-                {cartCount > 9 ? '9+' : cartCount}
-              </span>
+
+        {/* Mobile quick search bar */}
+        <div className="px-3 pb-2.5" ref={mobileSearchRef}>
+          <form
+            onSubmit={onSearchSubmit}
+            className="flex items-center border border-gray-200 rounded-full bg-gray-50 px-3 py-1.5 shadow-inner"
+          >
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setSuggestionsOpen(true);
+              }}
+              onFocus={() => { setSuggestionsOpen(true); }}
+              placeholder="Search jewellery, gold, silver..."
+              className="flex-1 min-w-0 bg-transparent border-none outline-none text-[12.5px] text-gray-800 placeholder-gray-400 [&::-webkit-search-cancel-button]:hidden"
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={onClearSearch}
+                className="p-1 text-gray-400 hover:text-gray-600 mr-1"
+                aria-label="Clear search"
+              >
+                ✕
+              </button>
             ) : null}
-          </Link>
+            <button
+              type="submit"
+              aria-label="Search"
+              className="w-6 h-6 rounded-full bg-coral text-white flex items-center justify-center shrink-0"
+            >
+              <SearchIcon />
+            </button>
+          </form>
+          <SearchSuggestions
+            query={searchQuery}
+            visible={suggestionsOpen}
+            onClose={closeSuggestions}
+            onNavigate={onSuggestionNavigate}
+            variant="mobile"
+          />
         </div>
       </div>
 
@@ -354,6 +469,23 @@ export default function Header() {
               </svg>
             </button>
           </div>
+
+          {/* Search inside mobile menu */}
+          <div className="p-4 border-b border-gray-100 bg-gray-50">
+            <form onSubmit={onSearchSubmit} className="flex border border-gray-300 rounded overflow-hidden bg-white">
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search for Jewellery..."
+                className="flex-1 px-3 py-2 text-[13px] border-none outline-none text-gray-800"
+              />
+              <button type="submit" className="bg-coral text-white px-4 flex items-center justify-center">
+                <SearchIcon />
+              </button>
+            </form>
+          </div>
+
           <div className="flex-1 overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap gap-4 text-[12px] font-semibold text-navy">
               <Link href="/cart" onClick={() => setMobileMenuOpen(false)}>
@@ -362,7 +494,7 @@ export default function Header() {
               {customer ? (
                 <>
                   <Link href="/account/orders" onClick={() => setMobileMenuOpen(false)}>
-                    Orders
+                    My Account
                   </Link>
                   <button type="button" onClick={() => { setMobileMenuOpen(false); onSignOut(); }}>
                     Sign out
@@ -423,18 +555,57 @@ export default function Header() {
             />
           </Link>
 
-          <div className="flex max-w-[300px] xl:max-w-[480px] shrink-0 border border-gray-300 rounded overflow-hidden mx-auto mb-0.5 w-full">
-            <input
-              type="text"
-              placeholder="Search for Jewellery"
-              className="flex-1 min-w-0 border-none outline-none px-3 py-[7px] text-[13px] text-gray-700 placeholder-gray-400 bg-white"
-            />
-            <button
-              aria-label="Search"
-              className="bg-coral hover:bg-coralDark text-white px-4 flex items-center shrink-0 border-none cursor-pointer"
+          <div 
+            className="relative max-w-[300px] xl:max-w-[480px] shrink-0 mx-auto mb-0.5 w-full" 
+            ref={desktopSearchRef}
+            onMouseEnter={() => setSuggestionsOpen(true)}
+            onMouseLeave={() => {
+              if (document.activeElement?.id !== 'desktop-search-input') {
+                setSuggestionsOpen(false);
+              }
+            }}
+          >
+            <form
+              onSubmit={onSearchSubmit}
+              className="flex border border-gray-300 rounded overflow-hidden w-full focus-within:border-navy focus-within:ring-1 focus-within:ring-navy transition-all"
             >
-              <SearchIcon />
-            </button>
+              <input
+                id="desktop-search-input"
+                type="search"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setSuggestionsOpen(true);
+                }}
+                onFocus={() => { setSuggestionsOpen(true); }}
+                placeholder="Search for Jewellery"
+                className="flex-1 min-w-0 border-none outline-none px-3 py-[7px] text-[13px] text-gray-700 placeholder-gray-400 bg-white [&::-webkit-search-cancel-button]:hidden"
+              />
+              {searchQuery ? (
+                <button
+                  type="button"
+                  onClick={onClearSearch}
+                  className="px-2 text-gray-400 hover:text-gray-600 bg-white text-xs"
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              ) : null}
+              <button
+                type="submit"
+                aria-label="Search"
+                className="bg-coral hover:bg-coralDark text-white px-4 flex items-center shrink-0 border-none cursor-pointer transition-colors"
+              >
+                <SearchIcon />
+              </button>
+            </form>
+            <SearchSuggestions
+              query={searchQuery}
+              visible={suggestionsOpen}
+              onClose={closeSuggestions}
+              onNavigate={onSuggestionNavigate}
+              variant="desktop"
+            />
           </div>
 
           <div className="flex flex-col items-end ml-auto shrink-0 gap-y-[3px]">
@@ -455,10 +626,6 @@ export default function Header() {
                     title={customer.email}
                   >
                     {customer.name.split(' ')[0]}
-                  </Link>
-                  <span className={VDIV} />
-                  <Link href="/account/orders" className={`${ITEM4} hover:text-navy`}>
-                    Orders
                   </Link>
                   <span className={VDIV} />
                   <button type="button" onClick={onSignOut} className={`${ITEM4} hover:text-navy`}>
@@ -490,11 +657,21 @@ export default function Header() {
                 </span>
               </Link>
               <span className={VDIV} />
-              <Link href="/cart" className={`${ITEM3} relative`} aria-label="Shopping cart">
+              <Link href="/wishlist" className={`${ITEM3} relative mr-3 hover:text-coral transition-colors`} aria-label="Wishlist">
+                <span className="relative inline-flex text-navy">
+                  <HeartIcon />
+                  {wishlistCount > 0 ? (
+                    <span className="absolute -top-1 -right-2 min-w-[15px] h-[15px] px-0.5 rounded-full bg-[#f1592a] text-white text-[9px] flex items-center justify-center font-bold shadow-sm">
+                      {wishlistCount > 9 ? '9+' : wishlistCount}
+                    </span>
+                  ) : null}
+                </span>
+              </Link>
+              <Link href="/cart" className={`${ITEM3} relative hover:text-coral transition-colors`} aria-label="Shopping cart">
                 <span className="relative inline-flex text-navy">
                   <BagIcon />
                   {cartCount > 0 ? (
-                    <span className="absolute -top-1 -right-2 min-w-[15px] h-[15px] px-0.5 rounded-full bg-[#f1592a] text-white text-[9px] flex items-center justify-center font-bold">
+                    <span className="absolute -top-1 -right-2 min-w-[15px] h-[15px] px-0.5 rounded-full bg-[#f1592a] text-white text-[9px] flex items-center justify-center font-bold shadow-sm">
                       {cartCount > 9 ? '9+' : cartCount}
                     </span>
                   ) : null}
@@ -577,13 +754,21 @@ export default function Header() {
                             By Price Range
                           </h4>
                           <ul className="space-y-2.5">
-                            {PRICE_RANGES.map((p) => (
+                            {PRICE_RANGES.map((p) => {
+                              const params = new URLSearchParams();
+                              if (p.min) params.set('price_min', String(p.min));
+                              if (p.max) params.set('price_max', String(p.max));
+                              return (
                               <li key={p.label}>
-                                <span className="text-[#334155] text-[13px] cursor-default">
+                                <Link 
+                                  href={`/jewellery/${item.slug}?${params.toString()}`}
+                                  className="text-[#334155] text-[13px] hover:text-[#f1592a] transition-colors"
+                                >
                                   {p.label}
-                                </span>
+                                </Link>
                               </li>
-                            ))}
+                              );
+                            })}
                           </ul>
                           <Link
                             href={`/jewellery/${item.slug}`}

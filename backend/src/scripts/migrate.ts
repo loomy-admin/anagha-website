@@ -57,12 +57,14 @@ async function main() {
       name TEXT NOT NULL,
       mobile TEXT NOT NULL,
       is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+      shipping_address JSONB DEFAULT '{}'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
 
   await sql`ALTER TABLE website_customers ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE`;
+  await sql`ALTER TABLE website_customers ADD COLUMN IF NOT EXISTS shipping_address JSONB DEFAULT '{}'::jsonb`;
 
   await sql`CREATE INDEX IF NOT EXISTS website_customers_email_idx ON website_customers (email)`;
 
@@ -134,10 +136,11 @@ async function main() {
     await sql`ALTER TABLE checkout_sessions DROP COLUMN phonepe_txn_id`;
   }
 
-  await sql`DROP INDEX IF EXISTS checkout_sessions_merchant_txn_idx`;
   await sql`CREATE INDEX IF NOT EXISTS checkout_sessions_status_idx ON checkout_sessions (status)`;
   await sql`CREATE INDEX IF NOT EXISTS checkout_sessions_razorpay_order_idx ON checkout_sessions (razorpay_order_id)`;
   await sql`CREATE INDEX IF NOT EXISTS checkout_sessions_customer_idx ON checkout_sessions (website_customer_id)`;
+
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS shipping_address JSONB DEFAULT '{}'::jsonb`;
 
   console.log('Migration complete.');
 }

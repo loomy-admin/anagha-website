@@ -1,19 +1,19 @@
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
-import AccountOrders from '@/components/AccountOrders';
+import WishlistPage from '@/components/WishlistPage';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Order history | Anagha',
+  title: 'My Wishlist | Anagha',
 };
 
-export default function AccountOrdersPage() {
+export default function WishlistRoute() {
   return (
     <>
       <Header />
       <main className="w-full bg-[#f9f9f9] min-h-screen font-sans pb-16">
-        <AccountOrders />
+        <WishlistPage />
       </main>
       <Footer />
     </>

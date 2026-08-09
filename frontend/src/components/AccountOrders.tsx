@@ -70,24 +70,9 @@ export default function AccountOrders() {
   if (!customer) return null;
 
   return (
-    <div className="max-w-3xl mx-auto px-4 md:px-8 py-10">
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-domine text-[28px] text-[#032C5E] font-bold">Order history</h1>
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            href="/cart"
-            className="text-[12px] font-semibold uppercase tracking-wide text-[#2e6da4] hover:underline"
-          >
-            View cart
-          </Link>
-          <span className="text-gray-300">·</span>
-          <Link
-            href="/jewellery"
-            className="text-[12px] font-semibold uppercase tracking-wide text-[#2e6da4] hover:underline"
-          >
-            Continue shopping
-          </Link>
-        </div>
+    <div className="w-full">
+      <div className="mb-6 flex items-center justify-between">
+        <h2 className="font-domine text-xl text-[#032C5E] font-bold">Order History</h2>
       </div>
 
       {error ? (

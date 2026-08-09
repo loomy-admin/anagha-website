@@ -175,13 +175,13 @@ export async function createCheckoutSession(input: {
     .map((t) => String(t || '').trim().toUpperCase())
     .filter(Boolean);
 
+  const payload: any = tags.length === 1 ? { tag_number: tags[0] } : { tag_numbers: tags };
+
   const res = await fetch('/api/checkout/session', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(
-      tags.length === 1 ? { tag_number: tags[0] } : { tag_numbers: tags },
-    ),
+    body: JSON.stringify(payload),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {

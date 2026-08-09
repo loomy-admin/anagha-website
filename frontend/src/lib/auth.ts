@@ -1,9 +1,26 @@
+export type ShippingAddress = {
+  id?: string;
+  pincode?: string;
+  recipientName?: string;
+  mobile?: string;
+  altMobile?: string;
+  addressLine?: string;
+  street?: string;
+  locality?: string;
+  landmark?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  isDefault?: boolean;
+};
+
 export type WebsiteCustomer = {
   id: string;
   name: string;
   email: string;
   mobile: string;
   is_admin?: boolean;
+  shippingAddress?: ShippingAddress | ShippingAddress[]; // Support legacy object and new array
 };
 
 async function parseJson(res: Response) {
@@ -19,6 +36,24 @@ export async function fetchMe(): Promise<WebsiteCustomer | null> {
   const body = await parseJson(res);
   if (!res.ok) {
     throw new Error(body.error || 'Could not load account');
+  }
+  return body.data as WebsiteCustomer;
+}
+
+export async function updateMe(input: {
+  name?: string;
+  mobile?: string;
+  shippingAddress?: ShippingAddress | ShippingAddress[];
+}) {
+  const res = await fetch('/api/auth/me', {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(body.error || 'Could not update profile');
   }
   return body.data as WebsiteCustomer;
 }

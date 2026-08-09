@@ -14,6 +14,7 @@ export type PublicCustomer = {
   email: string;
   mobile: string;
   is_admin: boolean;
+  shippingAddress?: unknown;
 };
 
 type SessionPayload = {
@@ -101,6 +102,7 @@ export function publicCustomer(
     email: row.email,
     mobile: row.mobile,
     is_admin: Boolean(row.isAdmin),
+    shippingAddress: row.shippingAddress,
   };
 }
 

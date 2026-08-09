@@ -60,7 +60,7 @@ export default function ProductGallery({
                 type="button"
                 onClick={() => setActive(slot.index)}
                 className={`w-16 h-16 sm:w-20 sm:h-20 p-1 flex items-center justify-center border-2 transition-colors ${
-                  selected ? 'border-[#2e6da4]' : 'border-gray-200 hover:border-gray-300'
+                  selected ? 'border-[#032C5E]' : 'border-gray-200 hover:border-gray-300'
                 }`}
                 aria-label={`View image ${slot.index + 1}`}
               >
