@@ -16,6 +16,8 @@ import {
 
 export default function JewelleryEditor() {
   const [groups, setGroups] = useState<CatalogFilterOption[]>([]);
+  const [visibleCategories, setVisibleCategories] = useState<Set<string>>(new Set());
+  const [visibilitySaving, setVisibilitySaving] = useState(false);
   const [imageOverrides, setImageOverrides] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,12 +30,16 @@ export default function JewelleryEditor() {
     let cancelled = false;
     async function load() {
       try {
-        const [payload, images] = await Promise.all([
-          fetchCatalogFilters(),
+        const [payload, images, visibilityRes] = await Promise.all([
+          fetchCatalogFilters({ admin_bypass: 'true' }),
           fetchGroupImages().catch(() => ({})),
+          fetch('/api/upload/erp-visibility').then(r => r.ok ? r.json() : {}).catch(() => ({})),
         ]);
         if (cancelled) return;
         setImageOverrides(images);
+        if (visibilityRes.visibleCategories) {
+          setVisibleCategories(new Set(visibilityRes.visibleCategories));
+        }
         const base = [...(payload.filters?.group || [])];
 
         // Facet `count` from /filters can under-count (ERP row page cap). Use catalog
@@ -42,7 +48,7 @@ export default function JewelleryEditor() {
           base.map(async (g) => {
             const slug = g.slug || slugifyName(g.name);
             try {
-              const catalog = await fetchCatalog({ group: slug, limit: 1, offset: 0 });
+              const catalog = await fetchCatalog({ group: slug, limit: 1, offset: 0, admin_bypass: 'true' });
               return { ...g, slug, count: catalog.total ?? g.count ?? 0 };
             } catch {
               return { ...g, slug, count: g.count ?? 0 };
@@ -94,6 +100,33 @@ export default function JewelleryEditor() {
     }
   }
 
+  async function toggleCategoryVisibility(slug: string) {
+    if (visibilitySaving) return;
+    setVisibilitySaving(true);
+    
+    const newSet = new Set(visibleCategories);
+    if (newSet.has(slug)) {
+      newSet.delete(slug);
+    } else {
+      newSet.add(slug);
+    }
+    setVisibleCategories(newSet);
+    
+    try {
+      await fetch('/api/upload/erp-visibility', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visibleCategories: Array.from(newSet) }),
+      });
+    } catch (err) {
+      console.error('Failed to save visibility:', err);
+      // Revert on error
+      setVisibleCategories(visibleCategories);
+    } finally {
+      setVisibilitySaving(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#fffbfa] flex flex-col">
       <Header />
@@ -133,15 +166,20 @@ export default function JewelleryEditor() {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
             <AnimatePresence mode="popLayout">
               {loading
-                ? [1, 2, 3, 4, 5].map((i) => (
-                    <div key={i} className="aspect-[4/5] bg-gray-100 rounded-[24px] animate-pulse" />
-                  ))
-                : groups.map((g) => {
-                    const slug = g.slug || slugifyName(g.name);
-                    const busy = uploadingSlug === slug;
-                    return (
-                      <motion.div
-                        layout
+                ? (
+                    <div className="col-span-full flex flex-col items-center justify-center py-32 text-gray-400">
+                      <span className="w-12 h-12 border-4 border-navy/20 border-t-navy rounded-full animate-spin mb-6" />
+                      <p className="text-xs font-black uppercase tracking-widest text-navy">Loading Categories...</p>
+                      <p className="text-[10px] text-gray-400 mt-2">Syncing live counts from ERP</p>
+                    </div>
+                  )
+                  : groups.map((g) => {
+                      const slug = g.slug || slugifyName(g.name);
+                      const busy = uploadingSlug === slug;
+                      const isVisible = visibleCategories.has(slug);
+                      return (
+                        <motion.div
+                          layout
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         key={g.id || slug}
@@ -179,17 +217,43 @@ export default function JewelleryEditor() {
                             </svg>
                           </button>
                         </div>
-                        <Link
-                          href={`/upload/jewellery/${slug}`}
-                          className="block p-5 text-center bg-white border-t border-gray-50"
-                        >
-                          <h3 className="font-bold text-navy text-sm uppercase tracking-wider line-clamp-1 group-hover:text-rose-600">
-                            {g.name}
-                          </h3>
-                          <p className="text-[10px] text-gray-400 mt-1 uppercase font-medium">
-                            {typeof g.count === 'number' ? `${g.count} available` : 'ERP group'}
-                          </p>
-                        </Link>
+                        <div className="flex flex-col border-t border-gray-50">
+                          <Link
+                            href={`/upload/jewellery/${slug}`}
+                            className="block p-5 text-center bg-white"
+                          >
+                            <h3 className="font-bold text-navy text-sm uppercase tracking-wider line-clamp-1 group-hover:text-rose-600 transition-colors">
+                              {g.name}
+                            </h3>
+                            <p className="text-[10px] text-gray-400 mt-1 uppercase font-medium">
+                              {typeof g.count === 'number' ? `${g.count} available` : 'ERP group'}
+                            </p>
+                          </Link>
+                          
+                          <div className="px-5 pb-5 bg-white flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                              Visible
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleCategoryVisibility(slug)}
+                              disabled={visibilitySaving}
+                              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 ${
+                                isVisible ? 'bg-rose-500' : 'bg-gray-200'
+                              } ${visibilitySaving ? 'opacity-50' : ''}`}
+                              role="switch"
+                              aria-checked={isVisible}
+                            >
+                              <span className="sr-only">Toggle visibility</span>
+                              <span
+                                aria-hidden="true"
+                                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                  isVisible ? 'translate-x-4' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
+                          </div>
+                        </div>
                       </motion.div>
                     );
                   })}

@@ -15,6 +15,8 @@ export type PublicCustomer = {
   mobile: string;
   is_admin: boolean;
   shippingAddress?: unknown;
+  cart?: unknown;
+  wishlist?: unknown;
 };
 
 type SessionPayload = {
@@ -103,6 +105,8 @@ export function publicCustomer(
     mobile: row.mobile,
     is_admin: Boolean(row.isAdmin),
     shippingAddress: row.shippingAddress,
+    cart: row.cart,
+    wishlist: row.wishlist,
   };
 }
 

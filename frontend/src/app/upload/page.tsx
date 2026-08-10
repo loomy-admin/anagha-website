@@ -20,6 +20,20 @@ export default function AdminHome() {
       link: '/upload/jewellery',
       color: 'from-blue-500 to-indigo-600',
       comingSoon: false
+    },
+    {
+      title: 'Contact Info',
+      desc: 'Update the global WhatsApp number and support email address used across the site.',
+      img: '/images/admin/landing_thumb.png', // Reusing an existing thumb for now
+      link: '/upload/contact',
+      color: 'from-orange-400 to-amber-500',
+    },
+    {
+      title: 'Search Suggestions',
+      desc: 'Configure the default Trending categories and What\'s New items in the search bar.',
+      img: '/images/admin/landing_thumb.png',
+      link: '/upload/search-suggestions',
+      color: 'from-pink-500 to-rose-600',
     }
   ];
 

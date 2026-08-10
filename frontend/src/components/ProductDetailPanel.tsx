@@ -3,6 +3,7 @@
 import AddToCartButton from '@/components/AddToCartButton';
 import BuyNowButton from '@/components/BuyNowButton';
 import { formatDisplayPrice } from '@/lib/erpCatalog';
+import { useContactInfo } from '@/lib/contact';
 
 type Props = {
   name: string;
@@ -25,6 +26,7 @@ export default function ProductDetailPanel({
   grossWeight,
   description,
 }: Props) {
+  const { whatsapp } = useContactInfo();
   // const [customizeOpen, setCustomizeOpen] = useState(false);
   const weight = netWeight ?? grossWeight;
   const weightLabel =
@@ -126,7 +128,7 @@ export default function ProductDetailPanel({
           <BuyNowButton item={cartItem} className="flex-1" />
         ) : null}
         <a
-          href={`https://wa.me/?text=${whatsappText}`}
+          href={`https://wa.me/${whatsapp.replace(/[^0-9]/g, '')}?text=${whatsappText}`}
           target="_blank"
           rel="noopener noreferrer"
           className="flex flex-1 items-center justify-center gap-2 bg-[#25D366] text-white font-bold py-3 px-4 rounded-full hover:bg-[#128C7E] transition-colors uppercase tracking-widest text-[11px] sm:text-[12px]"
@@ -146,7 +148,7 @@ export default function ProductDetailPanel({
         </div>
         <p className="text-[12px] text-gray-500">
           Schedule video call{' '}
-          <a href={`https://wa.me/?text=${whatsappText}`} className="text-[#032C5E] font-medium underline underline-offset-4">
+          <a href={`https://wa.me/${whatsapp.replace(/[^0-9]/g, '')}?text=${whatsappText}`} target="_blank" rel="noopener noreferrer" className="text-[#032C5E] font-medium underline underline-offset-4">
             Book Now
           </a>
         </p>

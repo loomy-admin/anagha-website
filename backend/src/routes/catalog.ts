@@ -4,6 +4,8 @@ import {
   applyWebsiteDescription,
   getAllWebsiteItemMeta,
 } from '../lib/websiteItemMeta.js';
+import { getErpVisibility } from '../lib/erpVisibility.js';
+import { getSearchSuggestionsConfig } from '../lib/searchSuggestions.js';
 
 const router = Router();
 
@@ -129,14 +131,12 @@ router.get('/', async (req: Request, res: Response) => {
     const priceMin = Number(req.query.price_min);
     const priceMax = Number(req.query.price_max);
 
-    // If sorting or price filtering is requested, fetch all matching items from ERP to sort/filter them globally before pagination
-    if (sort || !isNaN(priceMin) || !isNaN(priceMax)) {
-      delete erpQuery.limit;
-      erpQuery.offset = '0';
-      delete erpQuery.sort;
-      delete erpQuery.price_min;
-      delete erpQuery.price_max;
-    }
+    // We MUST fetch all items from ERP to apply visibility filtering in Node before pagination
+    erpQuery.limit = '1000000'; // Set artificially high to avoid ERP default caps
+    erpQuery.offset = '0';
+    delete erpQuery.sort;
+    delete erpQuery.price_min;
+    delete erpQuery.price_max;
 
     if (searchTerm) {
       const tokens = searchTerm.split(/\s+/).filter(Boolean);
@@ -238,8 +238,42 @@ router.get('/', async (req: Request, res: Response) => {
 
     if (!body) {
       body = await fetchErpPublic('/catalog', erpQuery);
+      
+      // If we requested a huge limit but the ERP capped it (e.g. returned 50 or 200), we must paginate to get all items
+      if (body?.data?.items && body.data.total > body.data.items.length) {
+        const erpLimit = body.data.items.length;
+        const total = body.data.total;
+        for (let offset = erpLimit; offset < total; offset += erpLimit) {
+          const nextQuery = { ...erpQuery, offset: String(offset), limit: String(erpLimit) };
+          try {
+            const res = await fetchErpPublic('/catalog', nextQuery);
+            if (res?.data?.items) {
+              body.data.items.push(...res.data.items);
+            }
+          } catch (err) {
+            console.error('[catalog] Pagination fetch error for offset', offset, err);
+          }
+        }
+      }
+
       if (cacheKey && body?.data?.items) {
         fullCatalogCache.set(cacheKey, { body: JSON.parse(JSON.stringify(body)), at: Date.now() });
+      }
+    }
+    
+    // Apply visibility filtering unless bypassed by admin
+    const adminBypass = req.query.admin_bypass === 'true';
+    if (!adminBypass) {
+      const visibility = await getErpVisibility();
+      if (body?.data?.items && Array.isArray(body.data.items)) {
+        body.data.items = body.data.items.filter((item: any) => {
+          const groupSlug = String(item.group_slug || '').toLowerCase();
+          const tag = String(item.tag_number || '');
+          if (visibility.visibleCategories.length > 0 && !visibility.visibleCategories.includes(groupSlug)) return false;
+          if (visibility.visibleProducts.length > 0 && !visibility.visibleProducts.includes(tag)) return false;
+          return true;
+        });
+        body.data.total = body.data.items.length;
       }
     }
 
@@ -322,10 +356,8 @@ router.get('/', async (req: Request, res: Response) => {
         }
       }
 
-      // Apply original pagination if we requested 10000 items (sorting or price filtering)
-      if (sort || (!isNaN(priceMin) && priceMin > 0) || (!isNaN(priceMax) && priceMax > 0)) {
-        body.data.items = body.data.items.slice(originalOffset, originalOffset + originalLimit);
-      }
+      // Apply pagination in Node since we deleted limit/offset to do visibility filtering
+      body.data.items = body.data.items.slice(originalOffset, originalOffset + originalLimit);
     }
     res.json(body);
   } catch (err) {
@@ -348,6 +380,27 @@ router.get('/filters', async (req: Request, res: Response) => {
         'branch_id',
       ]),
     );
+    
+    // Filter out categories not marked as visible unless bypassed by admin
+    const adminBypass = req.query.admin_bypass === 'true';
+    if (!adminBypass) {
+      const visibility = await getErpVisibility();
+      if (visibility.visibleCategories.length > 0) {
+        if (body?.data?.filters?.group) {
+          body.data.filters.group = body.data.filters.group.filter((g: any) => {
+            const slug = g.slug || String(g.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            return visibility.visibleCategories.includes(slug);
+          });
+        }
+        if (body?.filters?.group) {
+          body.filters.group = body.filters.group.filter((g: any) => {
+            const slug = g.slug || String(g.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            return visibility.visibleCategories.includes(slug);
+          });
+        }
+      }
+    }
+    
     res.json(body);
   } catch (err) {
     handleErpError(err, res);
@@ -377,12 +430,25 @@ router.get('/suggestions', async (req: Request, res: Response) => {
   try {
     const q = String(req.query.q || '').trim().toLowerCase();
     if (q.length < 2) {
+      const config = await getSearchSuggestionsConfig();
       const defaultCategories: Array<{ name: string; slug: string; type: string }> = [];
       try {
         const branchId = typeof req.query.branch_id === 'string' ? req.query.branch_id : undefined;
         const filtersRes = await getCachedFilters(branchId);
         const groups = (filtersRes?.group || filtersRes?.data?.filters?.group || []) as Array<{ name: string; slug?: string }>;
-        for (const g of groups.slice(0, 4)) {
+        
+        let selectedGroups = [];
+        if (config.trendingCategories && config.trendingCategories.length > 0) {
+          selectedGroups = groups.filter(g => {
+            const catSlug = g.slug || g.name.replace(/[^a-z0-9]+/g, '-').toLowerCase().replace(/^-|-$/g, '');
+            return config.trendingCategories.includes(catSlug);
+          });
+        }
+        if (selectedGroups.length === 0) {
+          selectedGroups = groups.slice(0, 4);
+        }
+
+        for (const g of selectedGroups) {
           const catSlug = g.slug || g.name.replace(/[^a-z0-9]+/g, '-').toLowerCase().replace(/^-|-$/g, '');
           defaultCategories.push({ name: g.name, slug: catSlug, type: 'group' });
         }
@@ -390,17 +456,37 @@ router.get('/suggestions', async (req: Request, res: Response) => {
 
       let defaultProducts: any[] = [];
       try {
-        const body = await fetchErpPublic('/catalog', { limit: '20' });
-        if (body?.data?.items && Array.isArray(body.data.items)) {
-          const items = [...body.data.items];
-          items.sort((a: any, b: any) => String(b.id || b.tag_number).localeCompare(String(a.id || a.tag_number)));
-          defaultProducts = items.slice(0, 3).map((item: any) => ({
-            tag_number: String(item.tag_number || ''),
-            name: String(item.name || ''),
-            image_url: item.image_url || item.pos_image_url || null,
-            display_price: item.display_price != null ? Number(item.display_price) : null,
-            group_slug: item.group_slug || null,
-          }));
+        if (config.whatsNewTags && config.whatsNewTags.length > 0) {
+          const rawTags = config.whatsNewTags.map(t => t.trim()).filter(Boolean);
+          const tags = Array.from(new Set(rawTags));
+          const itemPromises = tags.map(tag => fetchErpPublic(`/items/${encodeURIComponent(tag)}`, { branch_id: typeof req.query.branch_id === 'string' ? req.query.branch_id : undefined }).catch(() => null));
+          const itemsResponses = await Promise.all(itemPromises);
+          
+          defaultProducts = itemsResponses.filter(res => res && res.data).map(res => {
+            const item = res.data;
+            return {
+              tag_number: String(item.tag_number || ''),
+              name: String(item.name || ''),
+              image_url: item.image_url || item.pos_image_url || null,
+              display_price: item.display_price != null ? Number(item.display_price) : null,
+              group_slug: item.group_slug || null,
+            };
+          });
+        }
+
+        if (defaultProducts.length === 0) {
+          const body = await fetchErpPublic('/catalog', { limit: '20' });
+          if (body?.data?.items && Array.isArray(body.data.items)) {
+            const items = [...body.data.items];
+            items.sort((a: any, b: any) => String(b.id || b.tag_number).localeCompare(String(a.id || a.tag_number)));
+            defaultProducts = items.slice(0, 3).map((item: any) => ({
+              tag_number: String(item.tag_number || ''),
+              name: String(item.name || ''),
+              image_url: item.image_url || item.pos_image_url || null,
+              display_price: item.display_price != null ? Number(item.display_price) : null,
+              group_slug: item.group_slug || null,
+            }));
+          }
         }
       } catch {}
 

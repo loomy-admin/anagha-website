@@ -9,6 +9,7 @@ import {
   publicCustomer,
   setSessionCookie,
   verifyPassword,
+  requireCustomer,
 } from '../lib/customerAuth.js';
 
 const router = Router();
@@ -158,6 +159,38 @@ router.put('/me', async (req: Request, res: Response) => {
         .returning();
       
       updatedRow = rowWithAddress;
+    }
+
+    res.json({ data: publicCustomer(updatedRow) });
+  } catch (err) {
+    handle(err, res);
+  }
+});
+
+router.put('/me/sync', requireCustomer, async (req, res) => {
+  try {
+    const customer = (req as any).customer;
+    let updatedRow = customer;
+    
+    // Use the sql helper for arrays to avoid Neon HTTP stringification bugs
+    if (req.body?.cart !== undefined) {
+      const cartJson = JSON.stringify(req.body.cart || []);
+      const [row] = await db
+        .update(websiteCustomers)
+        .set({ cart: sql`${cartJson}::jsonb` })
+        .where(eq(websiteCustomers.id, customer.id))
+        .returning();
+      updatedRow = row;
+    }
+    
+    if (req.body?.wishlist !== undefined) {
+      const wishlistJson = JSON.stringify(req.body.wishlist || []);
+      const [row] = await db
+        .update(websiteCustomers)
+        .set({ wishlist: sql`${wishlistJson}::jsonb` })
+        .where(eq(websiteCustomers.id, customer.id))
+        .returning();
+      updatedRow = row;
     }
 
     res.json({ data: publicCustomer(updatedRow) });

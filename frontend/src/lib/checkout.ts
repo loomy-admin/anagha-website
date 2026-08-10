@@ -147,6 +147,25 @@ export function clearCart() {
   emitCartChanged();
 }
 
+export function mergeCart(remoteCart: unknown[]): CheckoutCartItem[] {
+  const remote = normalizeCart(remoteCart);
+  const local = loadCart();
+  
+  const map = new Map<string, CheckoutCartItem>();
+  // Local overwrites remote for the same item tag, but we merge both.
+  for (const item of remote) {
+    map.set(item.tag_number, item);
+  }
+  for (const item of local) {
+    map.set(item.tag_number, item);
+  }
+  
+  const merged = Array.from(map.values());
+  persistCart(merged);
+  return merged;
+}
+
+
 /** @deprecated Use addToCart / loadCart. Kept for older call sites. */
 export function saveCartItem(item: CheckoutCartItem) {
   addToCart(item);

@@ -97,3 +97,22 @@ export function clearWishlist() {
   localStorage.removeItem(WISHLIST_KEY);
   emitWishlistChanged();
 }
+
+export function mergeWishlist(remoteWishlist: unknown[]): WishlistItem[] {
+  const remote = normalizeWishlist(remoteWishlist);
+  const local = loadWishlist();
+  
+  const map = new Map<string, WishlistItem>();
+  // Local overwrites remote for the same item tag, but we merge both.
+  for (const item of remote) {
+    map.set(item.tag_number, item);
+  }
+  for (const item of local) {
+    map.set(item.tag_number, item);
+  }
+  
+  const merged = Array.from(map.values());
+  persistWishlist(merged);
+  return merged;
+}
+

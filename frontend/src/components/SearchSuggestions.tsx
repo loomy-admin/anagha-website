@@ -163,7 +163,11 @@ export default function SearchSuggestions({ query, visible, onClose, onNavigate,
                 <Link
                   key={t.slug}
                   href={`/jewellery/${t.slug}`}
-                  onClick={() => onNavigate(`/jewellery/${t.slug}`)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onNavigate(`/jewellery/${t.slug}`);
+                  }}
+                  onClick={(e) => e.preventDefault()}
                   className="px-3 py-1.5 bg-gray-50 text-gray-700 text-[13px] rounded-md hover:bg-gray-100 border border-gray-100 transition-colors"
                 >
                   {t.name}
@@ -178,13 +182,17 @@ export default function SearchSuggestions({ query, visible, onClose, onNavigate,
           <div>
             <h4 className="text-sm font-bold text-gray-800 mb-3">What's new</h4>
             <div className="grid grid-cols-3 gap-4">
-              {defaultResults.products.map((p) => {
+              {defaultResults.products.map((p, index) => {
                 const href = productHref(p);
                 return (
                   <Link 
-                    key={p.tag_number}
+                    key={`${p.tag_number}-${index}`}
                     href={href}
-                    onClick={() => onNavigate(href)}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      onNavigate(href);
+                    }}
+                    onClick={(e) => e.preventDefault()}
                     className="group flex flex-col gap-2"
                   >
                     <div className="aspect-square bg-gray-50 rounded-lg overflow-hidden relative border border-gray-100 flex items-center justify-center">
@@ -258,7 +266,11 @@ export default function SearchSuggestions({ query, visible, onClose, onNavigate,
                   <Link
                     key={`${cat.type}-${cat.slug}-${catIdx}`}
                     href={`/jewellery/${cat.slug}`}
-                    onClick={() => onNavigate(`/jewellery/${cat.slug}`)}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      onNavigate(`/jewellery/${cat.slug}`);
+                    }}
+                    onClick={(e) => e.preventDefault()}
                     className={`
                       inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium
                       transition-all duration-150
@@ -298,7 +310,11 @@ export default function SearchSuggestions({ query, visible, onClose, onNavigate,
                   <li key={product.tag_number}>
                     <Link
                       href={href}
-                      onClick={() => onNavigate(href)}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        onNavigate(href);
+                      }}
+                      onClick={(e) => e.preventDefault()}
                       className={`
                         flex items-center gap-3 px-2 py-2 rounded-lg transition-all duration-150
                         ${
@@ -354,7 +370,11 @@ export default function SearchSuggestions({ query, visible, onClose, onNavigate,
               return (
                 <Link
                   href={viewAllHref}
-                  onClick={() => onNavigate(viewAllHref)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onNavigate(viewAllHref);
+                  }}
+                  onClick={(e) => e.preventDefault()}
                   className={`
                     flex items-center justify-center gap-2 px-4 py-3 text-[12px] font-semibold
                     transition-all duration-150

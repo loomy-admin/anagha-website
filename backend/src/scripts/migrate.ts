@@ -65,6 +65,8 @@ async function main() {
 
   await sql`ALTER TABLE website_customers ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE`;
   await sql`ALTER TABLE website_customers ADD COLUMN IF NOT EXISTS shipping_address JSONB DEFAULT '{}'::jsonb`;
+  await sql`ALTER TABLE website_customers ADD COLUMN IF NOT EXISTS cart JSONB DEFAULT '[]'::jsonb`;
+  await sql`ALTER TABLE website_customers ADD COLUMN IF NOT EXISTS wishlist JSONB DEFAULT '[]'::jsonb`;
 
   await sql`CREATE INDEX IF NOT EXISTS website_customers_email_idx ON website_customers (email)`;
 

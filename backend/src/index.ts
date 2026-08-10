@@ -21,6 +21,9 @@ import jewelleryCategoriesRoutes from './routes/jewelleryCategories.js';
 import jewelleryProductsRoutes from './routes/jewelleryProducts.js';
 import websiteImagesRoutes from './routes/websiteImages.js';
 import itemMetaRoutes from './routes/itemMeta.js';
+import erpVisibilityRoutes from './routes/erpVisibility.js';
+import contactInfoRoutes from './routes/contactInfo.js';
+import searchSuggestionsRoutes from './routes/searchSuggestions.js';
 import catalogRoutes from './routes/catalog.js';
 import checkoutRoutes from './routes/checkout.js';
 import authRoutes from './routes/auth.js';
@@ -71,6 +74,8 @@ app.get('/api/site/group-images', async (_req, res) => {
 
 /** Public bill PDF iframe — same ERP host as checkout (ERP_API_URL). */
 app.use('/api/site/invoice', siteInvoiceRoutes);
+app.use('/api/site/contact', contactInfoRoutes);
+app.use('/api/site/search-suggestions', searchSuggestionsRoutes);
 
 app.use('/api/upload', requireAdmin);
 app.use('/api/upload/hero', heroRoutes);
@@ -88,6 +93,9 @@ app.use('/api/upload/jewellery/categories', jewelleryCategoriesRoutes);
 app.use('/api/upload/jewellery/products', jewelleryProductsRoutes);
 app.use('/api/upload/jewellery/website-images', websiteImagesRoutes);
 app.use('/api/upload/jewellery/item-meta', itemMetaRoutes);
+app.use('/api/upload/erp-visibility', erpVisibilityRoutes);
+app.use('/api/upload/contact', contactInfoRoutes);
+app.use('/api/upload/search-suggestions', searchSuggestionsRoutes);
 
 // Live ERP inventory catalog (BFF) — multi-client via ERP_STORE_SLUG
 app.use('/api/catalog', catalogRoutes);

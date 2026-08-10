@@ -57,6 +57,8 @@ export const websiteCustomers = pgTable('website_customers', {
   mobile: text('mobile').notNull(),
   isAdmin: boolean('is_admin').notNull().default(false),
   shippingAddress: jsonb('shipping_address').default({}),
+  cart: jsonb('cart').default([]),
+  wishlist: jsonb('wishlist').default([]),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

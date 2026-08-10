@@ -1,15 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { isInWishlist, toggleWishlist, WISHLIST_CHANGED_EVENT, type WishlistItem } from '@/lib/wishlist';
 
 const THUMB_SLOTS = 5;
 
 export default function ProductGallery({
   images,
   alt,
+  product,
 }: {
   images: string[];
   alt: string;
+  product?: any;
 }) {
   const realImages = images.filter(Boolean);
   const [active, setActive] = useState(0);
@@ -26,21 +29,55 @@ export default function ProductGallery({
     };
   });
 
+  const [isWishlisted, setIsWishlisted] = useState(false);
+
+  useEffect(() => {
+    if (!product?.tag_number) return;
+    setIsWishlisted(isInWishlist(product.tag_number));
+
+    const handleWishlistChange = () => {
+      setIsWishlisted(isInWishlist(product.tag_number));
+    };
+
+    window.addEventListener(WISHLIST_CHANGED_EVENT, handleWishlistChange);
+    return () => window.removeEventListener(WISHLIST_CHANGED_EVENT, handleWishlistChange);
+  }, [product?.tag_number]);
+
+  const handleToggleWishlist = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!product) return;
+
+    const item: WishlistItem = {
+      tag_number: product.tag_number,
+      name: product.name || 'Jewellery',
+      display_price: product.display_price,
+      image_url: product.image_url,
+      type_slug: product.type_slug,
+      group_slug: product.group_slug,
+      purity: product.purity,
+    };
+
+    toggleWishlist(item);
+  };
+
   return (
     <div className="w-full flex flex-col items-center">
       <div className="w-full aspect-square bg-[#f8f8f8] rounded-lg overflow-hidden flex items-center justify-center p-8 sm:p-12 relative group max-w-[500px]">
         <button
-          type="button"
-          aria-label="Add to wishlist"
-          className="absolute top-4 right-4 sm:top-6 sm:right-6 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors z-10"
+          onClick={handleToggleWishlist}
+          aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+          className="absolute top-4 right-4 sm:top-6 sm:right-6 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center transition-colors z-10 group/heart"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-            />
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            className={`w-5 h-5 transition-transform duration-300 ${isWishlisted ? 'scale-110' : 'group-hover/heart:scale-110 group-hover/heart:stroke-red-400'}`}
+            fill={isWishlisted ? "#ef4444" : "none"} 
+            stroke={isWishlisted ? "#ef4444" : "#9ca3af"} 
+            viewBox="0 0 24 24" 
+            strokeWidth="2"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
           </svg>
         </button>
         {current ? (

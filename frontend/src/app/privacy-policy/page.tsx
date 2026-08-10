@@ -1,13 +1,12 @@
+'use client';
+
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import { useContactInfo } from '@/lib/contact';
 import Link from 'next/link';
 
-export const metadata = {
-  title: 'Privacy Policy | Anagha',
-  description: 'Read the Anagha Privacy Policy to understand how we collect, use, and protect your personal information.',
-};
-
 export default function PrivacyPolicyPage() {
+  const { email } = useContactInfo();
   return (
     <>
       <Header />
@@ -155,7 +154,7 @@ export default function PrivacyPolicyPage() {
                 <h2 className="text-[#f1592a] font-semibold text-[13px] mb-2">8. Your Rights</h2>
                 <p className="mb-3">
                   You have the right to access or correct the personal information that we collect. You are also entitled to restrict or object, at any time, to the further processing of your personal information. You may write to us at{' '}
-                  <a href="mailto:an@anagha.com" className="underline">an@anagha.com</a>
+                  <a href={`mailto:${email}`} className="underline">{email}</a>
                   {' '}regarding the personal information collected by us.
                 </p>
                 <p className="mb-3">
@@ -211,7 +210,7 @@ export default function PrivacyPolicyPage() {
                 <h2 className="text-[#f1592a] font-semibold text-[13px] mb-2">14. Grievance Officer</h2>
                 <p>
                   Anagha has appointed a Grievance Officer for addressing complaints or grievances relating to the processing of personal data. You may reach out to us at{' '}
-                  <a href="mailto:an@anagha.com" className="underline">an@anagha.com</a>.
+                  <a href={`mailto:${email}`} className="underline">{email}</a>.
                 </p>
               </div>
 

@@ -4,10 +4,11 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
 import { fetchCatalogFilters, type CatalogFilterOption } from '@/lib/erpCatalog';
-import { fetchMe, logoutAccount, type WebsiteCustomer } from '@/lib/auth';
-import { CART_CHANGED_EVENT, getCartCount } from '@/lib/checkout';
-import { WISHLIST_CHANGED_EVENT, getWishlistCount } from '@/lib/wishlist';
+import { fetchMe, logoutAccount, syncCustomerData, type WebsiteCustomer } from '@/lib/auth';
+import { CART_CHANGED_EVENT, getCartCount, clearCart, mergeCart, loadCart } from '@/lib/checkout';
+import { WISHLIST_CHANGED_EVENT, getWishlistCount, clearWishlist, mergeWishlist, loadWishlist } from '@/lib/wishlist';
 import SearchSuggestions from './SearchSuggestions';
+import { useContactInfo } from '@/lib/contact';
 import {
   HEADER_NAV_INVALIDATE_EVENT,
   NAV_STORAGE_KEY,
@@ -175,11 +176,14 @@ function navFromHeaderGroups(selected: unknown): NavItem[] {
 export default function Header() {
   const router = useRouter();
   const pathname = usePathname();
+  const { whatsapp } = useContactInfo();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [navItems, setNavItems] = useState<NavItem[]>([ALL_JEWELLERY]);
   const [allGroups, setAllGroups] = useState<Array<{ label: string; slug: string }>>([]);
-  const [customer, setCustomer] = useState<WebsiteCustomer | null>(null);
+  const [customer, setCustomer] = useState<WebsiteCustomer | null>(() => 
+    customerCache === undefined ? null : customerCache
+  );
   const [cartCount, setCartCount] = useState(0);
   const [wishlistCount, setWishlistCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -191,9 +195,10 @@ export default function Header() {
 
   const onSuggestionNavigate = useCallback(
     (href: string) => {
-      setSuggestionsOpen(false);
-      setSearchQuery('');
-      setMobileMenuOpen(false);
+      // Do not synchronously close the suggestions here!
+      // This allows the element to stay mounted to catch the 'click' event (preventing fall-through)
+      // and keeps the UI visible while Next.js fetches the new page.
+      // The useEffect on [pathname] will automatically close it once navigation completes.
       router.push(href);
     },
     [router],
@@ -242,6 +247,10 @@ export default function Header() {
       .then((me) => {
         customerCache = me;
         if (!cancelled) setCustomer(me);
+        // Merge carts and sync back if we just logged in / fetched
+        // The merge functions will emit events which trigger the sync back to the server
+        mergeCart((me.cart as any[]) || []);
+        mergeWishlist((me.wishlist as any[]) || []);
       })
       .catch(() => {
         customerCache = null;
@@ -255,9 +264,15 @@ export default function Header() {
   useEffect(() => {
     function syncCart() {
       setCartCount(getCartCount());
+      if (customerCache) {
+        syncCustomerData(loadCart(), null).catch(() => {});
+      }
     }
     function syncWishlist() {
       setWishlistCount(getWishlistCount());
+      if (customerCache) {
+        syncCustomerData(null, loadWishlist()).catch(() => {});
+      }
     }
     syncCart();
     syncWishlist();
@@ -274,6 +289,8 @@ export default function Header() {
   async function onSignOut() {
     try {
       await logoutAccount();
+      clearCart();
+      clearWishlist();
       customerCache = null;
       setCustomer(null);
       router.refresh();
@@ -367,6 +384,14 @@ export default function Header() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
+            <a
+              href={`https://wa.me/${whatsapp.replace(/[^0-9]/g, '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-10 h-10 rounded-full border border-gray-100 flex items-center justify-center text-[#f1592a] hover:bg-[#f1592a] hover:text-white hover:border-[#f1592a] transition-all"
+            >
+              <WhatsAppIcon />
+            </a>
             <div className="w-7 h-7 rounded-full overflow-hidden border border-gray-300 flex items-center justify-center bg-white shrink-0">
               <img
                 src="/images/logo_icon.png"
