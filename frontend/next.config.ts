@@ -1,6 +1,20 @@
 import type { NextConfig } from "next";
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:4001";
+function resolveBackendUrl(): string {
+  const raw = process.env.BACKEND_URL?.trim();
+  if (!raw) return "http://localhost:4001";
+
+  const normalized = raw.replace(/\/$/, "");
+  if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
+    return normalized;
+  }
+
+  throw new Error(
+    `BACKEND_URL must be a full URL starting with http:// or https:// (e.g. https://anagha-backend.onrender.com). Current value: "${raw}"`
+  );
+}
+
+const BACKEND_URL = resolveBackendUrl();
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ['192.168.1.38'],
