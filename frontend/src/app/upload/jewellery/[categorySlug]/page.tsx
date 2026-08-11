@@ -9,6 +9,7 @@ import {
   formatDisplayPrice,
   type CatalogItem,
 } from '@/lib/erpCatalog';
+import { fetchErpVisibility } from '@/lib/erpVisibility';
 
 export default function CategoryProductsEditor({
   params,
@@ -35,7 +36,7 @@ export default function CategoryProductsEditor({
             offset: 0,
             admin_bypass: 'true',
           }),
-          fetch('/api/upload/erp-visibility').then(r => r.ok ? r.json() : {}).catch(() => ({})),
+          fetchErpVisibility(),
         ]);
         if (cancelled) return;
         setItems(data.items || []);

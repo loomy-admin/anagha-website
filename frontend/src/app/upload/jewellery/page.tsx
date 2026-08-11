@@ -13,6 +13,7 @@ import {
   uploadGroupImage,
   type CatalogFilterOption,
 } from '@/lib/erpCatalog';
+import { fetchErpVisibility } from '@/lib/erpVisibility';
 
 export default function JewelleryEditor() {
   const [groups, setGroups] = useState<CatalogFilterOption[]>([]);
@@ -33,7 +34,7 @@ export default function JewelleryEditor() {
         const [payload, images, visibilityRes] = await Promise.all([
           fetchCatalogFilters({ admin_bypass: 'true' }),
           fetchGroupImages().catch(() => ({})),
-          fetch('/api/upload/erp-visibility').then(r => r.ok ? r.json() : {}).catch(() => ({})),
+          fetchErpVisibility(),
         ]);
         if (cancelled) return;
         setImageOverrides(images);
