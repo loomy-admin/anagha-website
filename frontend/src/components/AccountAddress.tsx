@@ -106,16 +106,16 @@ export default function AccountAddress() {
   }
 
   function handleEdit(address: ShippingAddress) {
-    setPincode(address.pincode);
-    setRecipientName(address.recipientName);
-    setMobile(address.mobile);
+    setPincode(address.pincode || '');
+    setRecipientName(address.recipientName || '');
+    setMobile(address.mobile || '');
     setAltMobile(address.altMobile || '');
-    setAddressLine(address.addressLine);
+    setAddressLine(address.addressLine || '');
     setStreet(address.street || '');
     setLocality(address.locality || '');
     setLandmark(address.landmark || '');
-    setCity(address.city);
-    setState(address.state);
+    setCity(address.city || '');
+    setState(address.state || '');
     setEditingAddressId(address.id!);
     setFormMode('edit');
     setError(null);
