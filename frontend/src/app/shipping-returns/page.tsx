@@ -1,13 +1,12 @@
+'use client';
+
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import { useContactInfo } from '@/lib/contact';
 import Link from 'next/link';
 
-export const metadata = {
-  title: 'Shipping & Returns Policy | Anagha',
-  description: 'Learn about Anagha\'s 30-day money back policy, lifetime exchange, free shipping, and returns process.',
-};
-
 export default function ShippingReturnsPage() {
+  const { email } = useContactInfo();
   return (
     <>
       <Header />
@@ -137,7 +136,7 @@ export default function ShippingReturnsPage() {
                 <p className="mb-2">We are listening and happy to do what we can to improve. Please let us know.</p>
                 <p className="mb-2">
                   We can be reached at{' '}
-                  <a href="mailto:an@anagha.com" className="underline">an@anagha.com</a>
+                  <a href={`mailto:${email}`} className="underline">{email}</a>
                   {' '}or at 18004190066 between 9 am–10 pm, 7 days a week.
                 </p>
                 <p className="mb-1">Our registered office address is:</p>

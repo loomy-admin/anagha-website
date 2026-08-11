@@ -240,6 +240,7 @@ router.post('/session', requireCustomer, async (req: Request, res: Response) => 
         customerName: name,
         customerMobile: mobile,
         customerEmail: email || null,
+        shippingAddress: customer.shippingAddress || {},
         paymentPayload: { cart_tags: uniqueTags, items: lines },
         expiresAt,
       });

@@ -9,6 +9,7 @@ import {
   removeFromCart,
   type CheckoutCartItem,
 } from '@/lib/checkout';
+import { addToWishlist } from '@/lib/wishlist';
 import { formatDisplayPrice } from '@/lib/erpCatalog';
 
 export default function CartPage() {
@@ -73,7 +74,7 @@ export default function CartPage() {
             {items.length} item{items.length === 1 ? '' : 's'}
           </h1>
         </div>
-        <Link href="/jewellery" className="text-sm text-[#2e6da4] hover:underline">
+        <Link href="/jewellery" className="text-sm text-[#032C5E] hover:underline">
           Continue shopping
         </Link>
       </div>
@@ -105,13 +106,31 @@ export default function CartPage() {
                 <p className="text-base font-bold text-[#222] mt-2">
                   {formatDisplayPrice(item.display_price)}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setItems(removeFromCart(item.tag_number))}
-                  className="mt-3 text-[12px] text-red-600 hover:underline"
-                >
-                  Remove
-                </button>
+                <div className="flex items-center gap-4 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      addToWishlist({
+                        tag_number: item.tag_number,
+                        name: item.name,
+                        display_price: item.display_price,
+                        image_url: item.image_url,
+                        type_slug: item.type_slug,
+                      });
+                      setItems(removeFromCart(item.tag_number));
+                    }}
+                    className="text-[12px] text-[#032C5E] hover:underline font-semibold"
+                  >
+                    Move to Wishlist
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setItems(removeFromCart(item.tag_number))}
+                    className="text-[12px] text-red-600 hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
             </div>
           ))}

@@ -1,13 +1,12 @@
+'use client';
+
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import { useContactInfo } from '@/lib/contact';
 import Link from 'next/link';
 
-export const metadata = {
-  title: 'Fraud Warning Disclaimer | Anagha',
-  description: 'Please be aware of fraudulent claims and offers falsely presenting themselves as Anagha employees or representatives.',
-};
-
 export default function FraudWarningPage() {
+  const { email } = useContactInfo();
   return (
     <>
       <Header />
@@ -48,7 +47,7 @@ export default function FraudWarningPage() {
 
                 <p>
                   Criminal and/or civil liabilities may arise from such actions and we intend to cooperate with competent law enforcement authorities and to ask them to take appropriate action whenever such phenomena occur. Accordingly, we would ask you to immediately get in touch with us via email at{' '}
-                  <a href="mailto:an@anagha.com" className="text-[#1a73e8] underline">an@anagha.com</a>
+                  <a href={`mailto:${email}`} className="text-[#1a73e8] underline">{email}</a>
                   {' '}upon receiving a suspicious offer or invitation and additionally notify the police or other competent authority.
                 </p>
 

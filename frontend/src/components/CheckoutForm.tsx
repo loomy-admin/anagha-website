@@ -167,6 +167,9 @@ export default function CheckoutForm() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-10">
         <div className="lg:col-span-3 space-y-5">
           <div className="rounded-xl border border-gray-100 bg-[#fafafa] p-5 space-y-3">
+            <h2 className="text-sm font-bold text-[#032C5E] uppercase tracking-wide border-b border-gray-200 pb-2 mb-3">
+              Contact Info
+            </h2>
             <div className="flex justify-between gap-4 text-sm">
               <span className="text-gray-500">Name</span>
               <span className="font-medium text-[#222] text-right">{customer.name}</span>

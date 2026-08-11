@@ -1,13 +1,12 @@
+'use client';
+
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import { useContactInfo } from '@/lib/contact';
 import Link from 'next/link';
 
-export const metadata = {
-  title: 'Terms & Conditions | Anagha',
-  description: 'Terms and conditions for using Anagha website, placing orders, and participating in our programs.',
-};
-
 export default function TermsConditionsPage() {
+  const { email } = useContactInfo();
   return (
     <>
       <Header />
@@ -116,7 +115,7 @@ export default function TermsConditionsPage() {
                   <li>The prizes/ gifts/ giveaways are non-returnable/ exchangeable.</li>
                   <li>Any additional facilities provided by the company to winners and selectees of any contest is at the company's discretion</li>
                   <li>Anagha reserves the right to change the terms and conditions of contests/ giveaways without prior intimation.</li>
-                  <li>All disputes will be resolved at <a href="mailto:an@anagha.com" className="text-[#1a73e8] underline">an@anagha.com</a></li>
+                  <li>All disputes will be resolved at <a href={`mailto:${email}`} className="text-[#1a73e8] underline">{email}</a></li>
                 </ul>
               </div>
 

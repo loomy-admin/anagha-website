@@ -20,6 +20,7 @@ import {
   formatDisplayPrice,
   itemHref,
 } from '@/lib/erpCatalog';
+import ProductCard from './ProductCard';
 
 interface Props {
   /** ERP group slug from route. If undefined, show all. */
@@ -28,6 +29,12 @@ interface Props {
   audience?: string;
   /** Pre-select article filter from ?article= */
   article?: string;
+  /** Free-text search from ?search= */
+  search?: string;
+  /** Minimum price from ?price_min= */
+  priceMin?: number;
+  /** Maximum price from ?price_max= */
+  priceMax?: number;
 }
 
 type SelectedArticle = {
@@ -41,6 +48,9 @@ type ActiveFilters = {
   /** Multi-select — prefer article ids; ERP accepts `|` / `,` separated values. */
   articles: SelectedArticle[];
   purity?: string;
+  sort?: string;
+  priceMin?: number;
+  priceMax?: number;
 };
 
 type FilterOptions = {
@@ -125,11 +135,15 @@ const FilterGroup = ({
               className="flex items-center gap-3 cursor-pointer group w-full text-left"
             >
               <div
-                className={`w-4 h-4 border rounded-[2px] flex-shrink-0 transition-colors ${
-                  isOn ? 'border-[#2e6da4] bg-[#2e6da4]' : 'border-gray-300 bg-white group-hover:border-[#2e6da4]'
+                className={`w-4 h-4 border rounded-[2px] flex-shrink-0 transition-colors flex items-center justify-center ${
+                  isOn ? 'border-[#032C5E] text-[#032C5E]' : 'border-gray-300 bg-white group-hover:border-[#032C5E] text-transparent'
                 }`}
-              />
-              <span className={`text-[13px] ${isOn ? 'text-[#2e6da4] font-medium' : 'text-[#444]'}`}>
+              >
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+              <span className={`text-[13px] ${isOn ? 'text-[#032C5E] font-medium' : 'text-[#444]'}`}>
                 {f.name}
                 {typeof f.count === 'number' ? (
                   <span className="text-gray-400"> ({f.count})</span>
@@ -160,7 +174,7 @@ const MultiFilterGroup = ({
       <h3 className="font-domine text-[#222] text-[16px] mb-4 font-bold border-b border-gray-100 pb-2">
         {title}
         {selected.length > 0 ? (
-          <span className="ml-2 text-[11px] font-sans font-medium text-[#2e6da4]">
+          <span className="ml-2 text-[11px] font-sans font-medium text-[#032C5E]">
             {selected.length} selected
           </span>
         ) : null}
@@ -180,11 +194,15 @@ const MultiFilterGroup = ({
                 className="flex items-center gap-3 cursor-pointer group w-full text-left"
               >
                 <div
-                  className={`w-4 h-4 border rounded-[2px] flex-shrink-0 transition-colors ${
-                    isOn ? 'border-[#2e6da4] bg-[#2e6da4]' : 'border-gray-300 bg-white group-hover:border-[#2e6da4]'
+                  className={`w-4 h-4 border rounded-[2px] flex-shrink-0 transition-colors flex items-center justify-center ${
+                    isOn ? 'border-[#032C5E] text-[#032C5E]' : 'border-gray-300 bg-white group-hover:border-[#032C5E] text-transparent'
                   }`}
-                />
-                <span className={`text-[13px] ${isOn ? 'text-[#2e6da4] font-medium' : 'text-[#444]'}`}>
+                >
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </div>
+                <span className={`text-[13px] ${isOn ? 'text-[#032C5E] font-medium' : 'text-[#444]'}`}>
                   {f.name}
                   {typeof f.count === 'number' ? (
                     <span className="text-gray-400"> ({f.count})</span>
@@ -224,7 +242,7 @@ function FiltersBody({
     <div className="relative h-full min-h-[420px]">
       {loading ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center px-5">
-          <div className="w-10 h-10 border-[3px] border-[#2e6da4] border-t-transparent rounded-full animate-spin mb-3" />
+          <div className="w-10 h-10 border-[3px] border-[#032C5E] border-t-transparent rounded-full animate-spin mb-3" />
           <span className="text-[12px] text-gray-500 font-medium">Loading filters…</span>
         </div>
       ) : !hasAnyOptions ? (
@@ -280,45 +298,7 @@ function FiltersBody({
   );
 }
 
-function ProductCard({ product }: { product: CatalogItem }) {
-  const priceLabel = formatDisplayPrice(product.display_price);
-  const showPrice = product.display_price != null;
 
-  return (
-    <Link
-      href={itemHref(product)}
-      className="group flex flex-col bg-white rounded-lg overflow-hidden border border-gray-100 hover:shadow-lg transition-shadow duration-300 h-full"
-    >
-      <div className="relative w-full pt-[100%] bg-[#fafafa] overflow-hidden">
-        <div className="absolute inset-0 p-4 sm:p-6 flex items-center justify-center">
-          {product.image_url ? (
-            <img
-              src={product.image_url}
-              alt={product.name}
-              className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-500 mix-blend-multiply"
-            />
-          ) : (
-            <div className="text-gray-300 text-sm text-center px-4">No image</div>
-          )}
-        </div>
-      </div>
-      <div className="p-4 flex flex-col flex-1 items-start text-left bg-white">
-        <div className="flex items-center gap-2 mb-1.5 flex-wrap min-h-[24px]">
-          <span className={`font-bold text-[15px] md:text-[16px] ${showPrice ? 'text-[#222]' : 'text-gray-500 text-[13px]'}`}>
-            {priceLabel}
-          </span>
-        </div>
-        <h3 className="text-[#666] text-[12px] md:text-[13px] line-clamp-2 leading-snug min-h-[38px] w-full">
-          {product.name}
-        </h3>
-        <p className="text-[11px] text-gray-400 mt-1">
-          {product.tag_number}
-          {product.purity ? ` · ${product.purity}` : ''}
-        </p>
-      </div>
-    </Link>
-  );
-}
 
 function countActiveFilters(active: ActiveFilters, category?: string) {
   let n = 0;
@@ -350,14 +330,21 @@ function listingCacheKey(
   category: string | undefined,
   active: ActiveFilters,
   audience?: string,
+  search?: string,
+  page?: number,
 ) {
   return JSON.stringify({
     category: category || '',
     audience: audience || '',
+    search: search || '',
     type: active.type || '',
     group: active.group || '',
     articles: active.articles.map(articleKey).sort(),
     purity: active.purity || '',
+    sort: active.sort || '',
+    priceMin: active.priceMin || 0,
+    priceMax: active.priceMax || 0,
+    page: page || 1,
   });
 }
 
@@ -377,50 +364,38 @@ function normalizeAudience(raw?: string) {
   return undefined;
 }
 
-function readInitialListing(category?: string, audience?: string) {
+function readInitialListing(category?: string, audience?: string, search?: string) {
   const type = normalizeAudience(audience);
-  if (typeof window === 'undefined') {
-    return {
-      items: [] as CatalogItem[],
-      total: 0,
-      filterOptions: EMPTY_FILTER_OPTIONS,
-      loading: true,
-      hasLoaded: false,
-      type,
-    };
-  }
-  const hit = readListingCache(
-    listingCacheKey(category, { articles: [], type }, audience),
-  );
-  if (!hit) {
-    return {
-      items: [] as CatalogItem[],
-      total: 0,
-      filterOptions: EMPTY_FILTER_OPTIONS,
-      loading: true,
-      hasLoaded: false,
-      type,
-    };
-  }
   return {
-    items: hit.items,
-    total: hit.total,
-    filterOptions: hit.filterOptions,
-    loading: false,
-    hasLoaded: true,
+    items: [] as CatalogItem[],
+    total: 0,
+    filterOptions: EMPTY_FILTER_OPTIONS,
+    loading: true,
+    hasLoaded: false,
     type,
   };
 }
 
-export default function JewelleryListing({ category, audience, article }: Props) {
+export default function JewelleryListing({ category, audience, article, search, priceMin, priceMax }: Props) {
   const audienceType = normalizeAudience(audience);
   const articleName = String(article || '').trim();
-  const [active, setActive] = useState<ActiveFilters>(() => ({
-    articles: articleName ? [{ name: articleName }] : [],
-    type: audienceType,
-  }));
-  const cacheKey = listingCacheKey(category, active, audienceType);
-  const [boot] = useState(() => readInitialListing(category, audienceType));
+  const searchTerm = String(search || '').trim();
+  const [active, setActive] = useState<ActiveFilters>(() => {
+    let initialSort = '';
+    if (typeof window !== 'undefined') {
+      initialSort = sessionStorage.getItem('anagha_sort') || '';
+    }
+    return {
+      articles: articleName ? [{ name: articleName }] : [],
+      type: audienceType,
+      sort: initialSort,
+      priceMin: undefined,
+      priceMax: undefined,
+    };
+  });
+  const [page, setPage] = useState(1);
+  const cacheKey = listingCacheKey(category, active, audienceType, searchTerm, page);
+  const [boot] = useState(() => readInitialListing(category, audienceType, searchTerm));
 
   const [items, setItems] = useState<CatalogItem[]>(boot.items);
   const [total, setTotal] = useState(boot.total);
@@ -430,6 +405,30 @@ export default function JewelleryListing({ category, audience, article }: Props)
   const [filtersOpen, setFiltersOpen] = useState(false);
   const hasLoadedRef = useRef(boot.hasLoaded);
   const requestIdRef = useRef(0);
+
+  // Reset active filters whenever search query, category, or audience changes
+  useEffect(() => {
+    setActive((prev) => ({
+      articles: articleName ? [{ name: articleName }] : [],
+      type: audienceType,
+      group: undefined,
+      purity: undefined,
+      sort: prev.sort, // Preserve sort across categories
+      priceMin: undefined,
+      priceMax: undefined,
+    }));
+    setPage(1);
+  }, [category, audienceType, articleName, searchTerm]);
+
+  // Keep article filter in sync when arriving from header mega-menu links
+  useEffect(() => {
+    if (priceMin !== undefined || priceMax !== undefined) {
+      setActive((prev) => {
+        if (prev.priceMin === priceMin && prev.priceMax === priceMax) return prev;
+        return { ...prev, priceMin, priceMax };
+      });
+    }
+  }, [priceMin, priceMax]);
 
   // Keep article filter in sync when arriving from header mega-menu links
   useEffect(() => {
@@ -456,14 +455,16 @@ export default function JewelleryListing({ category, audience, article }: Props)
   const activeCount = countActiveFilters(active, category);
 
   const queryParams = useMemo(() => {
+    const limit = 48;
+    const offset = (page - 1) * limit;
     const params: Record<string, string | number | undefined> = {
-      limit: 48,
-      offset: 0,
+      limit,
+      offset,
     };
     if (active.group) params.group = active.group;
-    else if (category) params.group = category;
+    else if (category && !searchTerm) params.group = category;
     if (active.type) params.type = active.type;
-    else if (audienceType) params.type = audienceType;
+    else if (audienceType && !searchTerm) params.type = audienceType;
     if (active.articles.length) {
       const ids = active.articles.map((a) => String(a.id || '').trim()).filter(Boolean);
       const names = active.articles
@@ -475,22 +476,26 @@ export default function JewelleryListing({ category, audience, article }: Props)
       if (names.length) params.article = names.join('|');
     }
     if (active.purity) params.purity = active.purity;
+    if (active.sort) params.sort = active.sort;
+    if (active.priceMin !== undefined) params.price_min = active.priceMin;
+    if (active.priceMax !== undefined) params.price_max = active.priceMax;
+    if (searchTerm) params.search = searchTerm;
     return params;
-  }, [active, category, audienceType]);
+  }, [active, category, audienceType, searchTerm, page]);
 
   const load = useCallback(async () => {
     const requestId = ++requestIdRef.current;
-    const key = listingCacheKey(category, active, audienceType);
+    const key = listingCacheKey(category, active, audienceType, searchTerm, page);
     const hit = readListingCache(key);
 
-    // Soft revisit: show cache immediately, refresh in background with zero loaders
+    // Soft revisit: show cache immediately, refresh in background
     if (hit) {
       setItems(hit.items);
       setTotal(hit.total);
       setFilterOptions(hit.filterOptions);
       hasLoadedRef.current = true;
       setInitialLoading(false);
-    } else if (!hasLoadedRef.current) {
+    } else {
       setInitialLoading(true);
     }
     setError(null);
@@ -541,7 +546,7 @@ export default function JewelleryListing({ category, audience, article }: Props)
         setInitialLoading(false);
       }
     }
-  }, [queryParams, active, category, audienceType]);
+  }, [queryParams, active, category, audienceType, searchTerm, page]);
 
   useEffect(() => {
     load();
@@ -556,16 +561,40 @@ export default function JewelleryListing({ category, audience, article }: Props)
     };
   }, [filtersOpen]);
 
-  const clearFilters = () =>
-    startTransition(() => setActive({ articles: [], type: audienceType }));
+  const clearFilters = () => {
+    startTransition(() => {
+      setActive({ articles: [], type: audienceType, sort: '' });
+      setPage(1);
+    });
+  };
 
   return (
     <main className="w-full bg-[#f9f9f9] min-h-screen font-sans pb-24 lg:pb-20">
       <div className="max-w-[1400px] mx-auto px-4 md:px-8 mt-6">
+        {searchTerm ? (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500 text-sm">Search results for:</span>
+              <span className="font-bold text-navy text-[15px] bg-blue-50 text-[#032C5E] px-3 py-1 rounded-full border border-blue-100">
+                &ldquo;{searchTerm}&rdquo;
+              </span>
+              <span className="text-gray-400 text-sm font-medium">
+                ({total} {total === 1 ? 'item' : 'items'})
+              </span>
+            </div>
+            <Link
+              href={category ? `/jewellery/${category}` : '/jewellery'}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-coral hover:bg-coralDark px-3.5 py-1.5 rounded-full transition-all shadow-sm"
+            >
+              <span>✕ Clear Search</span>
+            </Link>
+          </div>
+        ) : null}
+
         <div className="flex flex-col lg:flex-row gap-8 items-start">
           {/* Desktop sidebar */}
-          <aside className="hidden lg:flex lg:flex-col w-[280px] shrink-0 bg-white shadow-sm border border-gray-100 sticky top-24 h-[calc(100vh-120px)] overflow-hidden">
-            <div className="bg-[#2e6da4] text-white px-4 py-3 font-medium tracking-wide shrink-0 z-10 flex items-center justify-between">
+          <aside className="hidden lg:flex lg:flex-col w-[280px] shrink-0 bg-white shadow-sm border border-gray-100 sticky top-24 h-[calc(100vh-120px)] overflow-hidden rounded-lg">
+            <div className="bg-[#032C5E] text-white px-4 py-3 font-medium tracking-wide shrink-0 z-10 flex items-center justify-between">
               <span>FILTERS</span>
               {activeCount > 0 ? (
                 <button
@@ -590,33 +619,123 @@ export default function JewelleryListing({ category, audience, article }: Props)
 
           {/* Product grid — full width on mobile; keep layout stable while refreshing */}
           <div className="flex-1 w-full min-w-0 relative">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-sm text-gray-500 hidden md:block">
+                {total > 0 ? `Showing ${(page - 1) * 48 + 1} - ${Math.min(page * 48, total)} of ${total} items` : ''}
+              </span>
+              <div className="flex items-center gap-2 ml-auto">
+                <label htmlFor="sort-select" className="text-sm font-medium text-gray-600 hidden sm:block">Sort by:</label>
+                <select
+                  id="sort-select"
+                  className="text-sm border border-gray-300 rounded-md py-1.5 px-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#032C5E] focus:border-[#032C5E] text-gray-700 font-medium cursor-pointer"
+                  value={active.sort || ''}
+                  onChange={(e) => {
+                    const nextSort = e.target.value;
+                    if (typeof window !== 'undefined') {
+                      sessionStorage.setItem('anagha_sort', nextSort);
+                    }
+                    startTransition(() => {
+                      setActive((prev) => ({ ...prev, sort: nextSort }));
+                      setPage(1);
+                    });
+                  }}
+                >
+                  <option value="">Popular</option>
+                  <option value="price_asc">Low to high</option>
+                  <option value="price_desc">High to low</option>
+                  <option value="newest">New items</option>
+                </select>
+              </div>
+            </div>
+
             {initialLoading ? (
-              <div className="flex flex-col items-center justify-center py-32 text-center">
-                <div className="w-12 h-12 border-4 border-[#2e6da4] border-t-transparent rounded-full animate-spin mb-4" />
-                <p className="text-gray-400 font-medium">Loading live inventory...</p>
+              <div className="flex flex-col items-center justify-center py-32 text-center bg-white rounded-xl border border-gray-100 shadow-sm">
+                <div className="w-12 h-12 border-4 border-[#032C5E] border-t-transparent rounded-full animate-spin mb-4" />
+                <p className="text-gray-400 font-medium">Loading...</p>
               </div>
             ) : error && items.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-24 text-center px-4">
-                <h2 className="text-xl font-domine text-gray-500 mb-2">Catalog unavailable</h2>
+              <div className="flex flex-col items-center justify-center py-24 text-center px-4 bg-white rounded-xl border border-gray-100 shadow-sm">
+                <h2 className="text-xl font-domine text-gray-700 mb-2">Catalog unavailable</h2>
                 <p className="text-gray-400 text-sm max-w-md">{error}</p>
                 <p className="text-gray-400 text-xs mt-3">
                   Ensure Anagha backend has ERP_API_URL and ERP_STORE_SLUG configured.
                 </p>
               </div>
             ) : items.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-24 text-center">
-                <h2 className="text-xl font-domine text-gray-400 mb-2">No products found</h2>
-                <p className="text-gray-400 text-sm">No available items match these filters.</p>
-                <Link href="/jewellery" className="mt-6 text-[#2e6da4] text-sm font-medium hover:underline">
+              <div className="flex flex-col items-center justify-center py-20 px-6 text-center bg-white rounded-xl border border-gray-100 shadow-sm">
+                <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 mb-4">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <h2 className="text-xl font-bold text-navy mb-2">No products found</h2>
+                <p className="text-gray-500 text-sm max-w-md">
+                  {searchTerm
+                    ? `We couldn't find any available items matching "${searchTerm}". Try checking your spelling or searching for another category.`
+                    : 'No available items match the selected filters.'}
+                </p>
+                
+                {/* Popular search chips */}
+                <div className="mt-6">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Popular Searches</p>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    {['Haram', 'Necklace', 'Earrings', 'Silver Anklet', 'Bangles', 'Gold Coins', 'Kasulaperu'].map((chip) => (
+                      <Link
+                        key={chip}
+                        href={`/jewellery?search=${encodeURIComponent(chip.toLowerCase())}`}
+                        className="text-xs bg-gray-100 hover:bg-[#032C5E] hover:text-white text-gray-700 px-3 py-1.5 rounded-full transition-colors font-medium"
+                      >
+                        {chip}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+
+                <Link
+                  href="/jewellery"
+                  className="mt-6 inline-flex items-center gap-2 bg-navy text-white text-xs font-bold uppercase tracking-wider px-5 py-2.5 rounded-full hover:bg-navy/90 transition-all shadow"
+                >
                   Browse All Jewellery →
                 </Link>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-                {items.map((product) => (
-                  <ProductCard key={product.id || product.tag_number} product={product} />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+                  {items.map((product) => (
+                    <ProductCard key={product.id || product.tag_number} product={product} />
+                  ))}
+                </div>
+                
+                {total > 48 ? (
+                  <div className="mt-12 flex justify-center items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={page === 1}
+                      onClick={() => {
+                        setPage((p) => p - 1);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-[#032C5E] hover:text-white hover:border-[#032C5E] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-sm text-gray-600 px-4 font-medium">
+                      Page {page} of {Math.ceil(total / 48)}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={page >= Math.ceil(total / 48)}
+                      onClick={() => {
+                        setPage((p) => p + 1);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-[#032C5E] hover:text-white hover:border-[#032C5E] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                ) : null}
+              </>
             )}
           </div>
         </div>
@@ -640,7 +759,7 @@ export default function JewelleryListing({ category, audience, article }: Props)
             </svg>
             Filters
             {activeCount > 0 ? (
-              <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#2e6da4] text-white text-[11px] font-bold flex items-center justify-center">
+              <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#032C5E] text-white text-[11px] font-bold flex items-center justify-center">
                 {activeCount}
               </span>
             ) : null}

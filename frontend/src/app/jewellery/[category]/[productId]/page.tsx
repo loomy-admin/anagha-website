@@ -69,7 +69,7 @@ export default async function ProductDetailPage({
       <div className="max-w-[1400px] mx-auto px-4 md:px-8 mt-8">
         <div className="flex flex-col lg:flex-row gap-12 lg:gap-20">
           <div className="w-full lg:w-[45%] flex flex-col items-center">
-            <ProductGallery images={gallery} alt={product.name} />
+            <ProductGallery images={gallery} alt={product.name} product={product} />
           </div>
 
           <ProductDetailPanel

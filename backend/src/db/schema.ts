@@ -56,6 +56,9 @@ export const websiteCustomers = pgTable('website_customers', {
   name: text('name').notNull(),
   mobile: text('mobile').notNull(),
   isAdmin: boolean('is_admin').notNull().default(false),
+  shippingAddress: jsonb('shipping_address').default({}),
+  cart: jsonb('cart').default([]),
+  wishlist: jsonb('wishlist').default([]),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -81,6 +84,7 @@ export const checkoutSessions = pgTable('checkout_sessions', {
   erpBillId: text('erp_bill_id'),
   erpBillNumber: text('erp_bill_number'),
   paymentPayload: jsonb('payment_payload').default({}),
+  shippingAddress: jsonb('shipping_address').default({}),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()

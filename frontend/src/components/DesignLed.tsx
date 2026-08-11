@@ -106,7 +106,7 @@ export default function DesignLed({ liveImages, liveLabels }: Props) {
                 </div>
 
                 {/* Label below */}
-                <p className="text-[16px] text-gray-500 font-semibold tracking-wide mt-4 group-hover:text-[#2e6da4] transition-colors">
+                <p className="text-[16px] text-gray-500 font-semibold tracking-wide mt-4 group-hover:text-[#032C5E] transition-colors">
                   {displayLabel}
                 </p>
               </Link>
