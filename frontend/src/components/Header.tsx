@@ -247,6 +247,7 @@ export default function Header() {
       .then((me) => {
         customerCache = me;
         if (!cancelled) setCustomer(me);
+        if (!me) return;
         // Merge carts and sync back if we just logged in / fetched
         // The merge functions will emit events which trigger the sync back to the server
         mergeCart((me.cart as any[]) || []);
