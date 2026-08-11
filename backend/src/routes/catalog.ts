@@ -437,7 +437,7 @@ router.get('/suggestions', async (req: Request, res: Response) => {
         const filtersRes = await getCachedFilters(branchId);
         const groups = (filtersRes?.group || filtersRes?.data?.filters?.group || []) as Array<{ name: string; slug?: string }>;
         
-        let selectedGroups = [];
+        let selectedGroups: Array<{ name: string; slug?: string }> = [];
         if (config.trendingCategories && config.trendingCategories.length > 0) {
           selectedGroups = groups.filter(g => {
             const catSlug = g.slug || g.name.replace(/[^a-z0-9]+/g, '-').toLowerCase().replace(/^-|-$/g, '');
