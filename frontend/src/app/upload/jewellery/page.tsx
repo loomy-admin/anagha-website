@@ -33,7 +33,7 @@ export default function JewelleryEditor() {
         const [payload, images, visibilityRes] = await Promise.all([
           fetchCatalogFilters({ admin_bypass: 'true' }),
           fetchGroupImages().catch(() => ({})),
-          fetch('/api/upload/erp-visibility').then(r => r.ok ? r.json() : {}).catch(() => ({})),
+          fetch('/api/upload/erp-visibility').then(r => r.ok ? r.json() : {}).catch(() => ({})) as Promise<any>,
         ]);
         if (cancelled) return;
         setImageOverrides(images);

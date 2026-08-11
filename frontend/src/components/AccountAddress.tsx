@@ -106,16 +106,16 @@ export default function AccountAddress() {
   }
 
   function handleEdit(address: ShippingAddress) {
-    setPincode(address.pincode);
-    setRecipientName(address.recipientName);
-    setMobile(address.mobile);
+    setPincode(address.pincode || '');
+    setRecipientName(address.recipientName || '');
+    setMobile(address.mobile || '');
     setAltMobile(address.altMobile || '');
-    setAddressLine(address.addressLine);
+    setAddressLine(address.addressLine || '');
     setStreet(address.street || '');
     setLocality(address.locality || '');
     setLandmark(address.landmark || '');
-    setCity(address.city);
-    setState(address.state);
+    setCity(address.city || '');
+    setState(address.state || '');
     setEditingAddressId(address.id!);
     setFormMode('edit');
     setError(null);
@@ -160,7 +160,11 @@ export default function AccountAddress() {
 
     startTransition(async () => {
       try {
-        const updated = await updateMe({ shippingAddress: updatedAddresses });
+        const payload: any = { shippingAddress: updatedAddresses };
+        if (!customer?.mobile || customer.mobile.trim() === '') {
+          payload.mobile = mobile;
+        }
+        const updated = await updateMe(payload);
         setCustomer(updated);
         setAddresses(updatedAddresses);
         setSuccess(formMode === 'edit' ? 'Shipping address updated successfully.' : 'Shipping address added successfully.');

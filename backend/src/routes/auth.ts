@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { OAuth2Client } from 'google-auth-library';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { websiteCustomers } from '../db/schema.js';
@@ -194,6 +195,55 @@ router.put('/me/sync', requireCustomer, async (req, res) => {
     }
 
     res.json({ data: publicCustomer(updatedRow) });
+  } catch (err) {
+    handle(err, res);
+  }
+});
+
+router.post('/google', async (req: Request, res: Response) => {
+  try {
+    const { credential } = req.body;
+    if (!credential) return res.status(400).json({ error: 'Google credential missing' });
+    
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) throw new Error('GOOGLE_CLIENT_ID not configured on server');
+
+    const client = new OAuth2Client(clientId);
+    const ticket = await client.verifyIdToken({
+      idToken: credential,
+      audience: clientId,
+    });
+    
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      return res.status(400).json({ error: 'Invalid Google token payload' });
+    }
+
+    const email = normalizeEmail(payload.email);
+    const name = payload.name || 'Google User';
+
+    let [customer] = await db
+      .select()
+      .from(websiteCustomers)
+      .where(eq(websiteCustomers.email, email))
+      .limit(1);
+
+    if (!customer) {
+      const dummyPasswordHash = await hashPassword(Math.random().toString(36).slice(-10) + 'A1!');
+      const [newCustomer] = await db
+        .insert(websiteCustomers)
+        .values({
+          email,
+          name,
+          passwordHash: dummyPasswordHash,
+          mobile: '', 
+        })
+        .returning();
+      customer = newCustomer;
+    }
+
+    setSessionCookie(res, customer.id);
+    res.json({ data: publicCustomer(customer) });
   } catch (err) {
     handle(err, res);
   }

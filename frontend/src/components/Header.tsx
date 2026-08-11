@@ -249,8 +249,10 @@ export default function Header() {
         if (!cancelled) setCustomer(me);
         // Merge carts and sync back if we just logged in / fetched
         // The merge functions will emit events which trigger the sync back to the server
-        mergeCart((me.cart as any[]) || []);
-        mergeWishlist((me.wishlist as any[]) || []);
+        if (me) {
+          mergeCart((me.cart as any[]) || []);
+          mergeWishlist((me.wishlist as any[]) || []);
+        }
       })
       .catch(() => {
         customerCache = null;
@@ -408,6 +410,7 @@ export default function Header() {
               height={40}
               className="h-10 w-auto object-contain [clip-path:inset(1px_4px)]"
               style={{ width: 'auto' }}
+              unoptimized
               priority
             />
           </Link>
@@ -487,6 +490,7 @@ export default function Header() {
               height={40}
               className="h-10 w-auto object-contain [clip-path:inset(1px_4px)]"
               style={{ width: 'auto' }}
+              unoptimized
             />
             <button aria-label="Close Menu" onClick={() => setMobileMenuOpen(false)} className="text-navy p-1">
               <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -576,6 +580,7 @@ export default function Header() {
               height={80}
               className="h-[50px] xl:h-[60px] w-auto object-contain [clip-path:inset(1px_4px)]"
               style={{ width: 'auto' }}
+              unoptimized
               priority
             />
           </Link>
@@ -670,8 +675,10 @@ export default function Header() {
               )}
             </div>
             <div className="flex items-center h-[33px]">
-              <Link
-                href="#"
+              <a
+                href={`https://wa.me/${whatsapp.replace(/[^0-9]/g, '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex flex-row items-center justify-center gap-2 bg-[#25D366] text-white font-bold text-[10px] xl:text-[11px] leading-tight cursor-pointer whitespace-nowrap w-auto px-4 py-1.5 rounded-full shadow-sm transition-all"
               >
                 <WhatsAppIcon />
@@ -680,7 +687,7 @@ export default function Header() {
                   <br />
                   With Us
                 </span>
-              </Link>
+              </a>
               <span className={VDIV} />
               <Link href="/wishlist" className={`${ITEM3} relative mr-3 hover:text-coral transition-colors`} aria-label="Wishlist">
                 <span className="relative inline-flex text-navy">
@@ -720,6 +727,7 @@ export default function Header() {
             width={75}
             height={75}
             className="w-full h-full object-contain [clip-path:circle(47%)] scale-[0.85]"
+            unoptimized
             priority
           />
         </div>

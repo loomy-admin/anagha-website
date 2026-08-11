@@ -6,6 +6,9 @@ import {
 } from '../lib/websiteItemMeta.js';
 import { getErpVisibility } from '../lib/erpVisibility.js';
 import { getSearchSuggestionsConfig } from '../lib/searchSuggestions.js';
+import { db } from '../db/index.js';
+import { cachedCatalogItems } from '../db/schema.js';
+import { sql, and, eq, ilike, or, desc, asc, gte, lte } from 'drizzle-orm';
 
 const router = Router();
 
@@ -131,234 +134,114 @@ router.get('/', async (req: Request, res: Response) => {
     const priceMin = Number(req.query.price_min);
     const priceMax = Number(req.query.price_max);
 
-    // We MUST fetch all items from ERP to apply visibility filtering in Node before pagination
-    erpQuery.limit = '1000000'; // Set artificially high to avoid ERP default caps
-    erpQuery.offset = '0';
-    delete erpQuery.sort;
-    delete erpQuery.price_min;
-    delete erpQuery.price_max;
-
-    if (searchTerm) {
-      const tokens = searchTerm.split(/\s+/).filter(Boolean);
-      const stems = tokens.map(normalizeStem);
-
-      // Check metal type keywords
-      if (!erpQuery.metal_type) {
-        if (tokens.some((t) => t === 'silver' || t === '92.5' || t === '925' || t === 'sterling')) {
-          erpQuery.metal_type = 'silver';
-        } else if (tokens.some((t) => t === 'gold' || t === '22k' || t === '916' || t === '24k' || t === '18k')) {
-          erpQuery.metal_type = 'gold';
-        }
+    // PATH B: Sorted Browsing (Read from Postgres DB)
+    if (sort) {
+      const conditions = [];
+      if (erpQuery.group) conditions.push(eq(cachedCatalogItems.groupSlug, erpQuery.group));
+      if (erpQuery.type) conditions.push(eq(cachedCatalogItems.typeSlug, erpQuery.type.toLowerCase()));
+      if (erpQuery.article) conditions.push(ilike(cachedCatalogItems.articleSlug, `%${erpQuery.article}%`));
+      if (erpQuery.metal_type) conditions.push(ilike(cachedCatalogItems.metalType, `%${erpQuery.metal_type}%`));
+      if (erpQuery.purity) conditions.push(ilike(cachedCatalogItems.purity, `%${erpQuery.purity}%`));
+      if (req.query.has_image === 'true') conditions.push(eq(cachedCatalogItems.hasImage, true));
+      if (!isNaN(priceMin) && priceMin > 0) conditions.push(gte(cachedCatalogItems.displayPrice, priceMin));
+      if (!isNaN(priceMax) && priceMax > 0) conditions.push(lte(cachedCatalogItems.displayPrice, priceMax));
+      if (searchTerm) {
+        conditions.push(
+          or(
+            ilike(sql`data->>'name'`, `%${searchTerm}%`),
+            ilike(cachedCatalogItems.tagNumber, `%${searchTerm}%`)
+          )
+        );
       }
 
-      // Check audience keywords
-      if (!erpQuery.type) {
-        if (tokens.some((t) => t === 'men' || t === 'mens' || t === 'male' || t === 'gents')) {
-          erpQuery.type = 'MEN';
-        } else if (tokens.some((t) => t === 'kids' || t === 'kid' || t === 'children' || t === 'child' || t === 'baby')) {
-          erpQuery.type = 'KIDS';
-        } else if (tokens.some((t) => t === 'women' || t === 'womens' || t === 'ladies' || t === 'female')) {
-          erpQuery.type = 'WOMEN';
+      let orderBy = asc(cachedCatalogItems.erpCreatedAt);
+      if (sort === 'price_asc') orderBy = asc(cachedCatalogItems.displayPrice);
+      else if (sort === 'price_desc') orderBy = desc(cachedCatalogItems.displayPrice);
+      else if (sort === 'newest') orderBy = desc(cachedCatalogItems.erpCreatedAt);
+      else if (sort === 'name_asc') orderBy = sql`data->>'name' ASC`;
+      else if (sort === 'name_desc') orderBy = sql`data->>'name' DESC`;
+      else if (sort === 'image_first') orderBy = desc(cachedCatalogItems.hasImage);
+
+      const itemsQuery = db.select({ data: cachedCatalogItems.data })
+        .from(cachedCatalogItems)
+        .where(and(...conditions))
+        .orderBy(orderBy)
+        .limit(originalLimit)
+        .offset(originalOffset);
+        
+      const countQuery = db.select({ count: sql<number>`count(*)` })
+        .from(cachedCatalogItems)
+        .where(and(...conditions));
+        
+      const [itemsRes, countRes] = await Promise.all([itemsQuery, countQuery]);
+      return res.json({
+        data: {
+          items: itemsRes.map((r: any) => r.data),
+          total: Number(countRes[0]?.count || 0)
         }
-      }
-
-      // Check taxonomy groups and articles if not already explicitly provided
-      if (!erpQuery.group && !erpQuery.article) {
-        const filtersRes = await getCachedFilters(erpQuery.branch_id);
-        const groups = (filtersRes?.group || filtersRes?.data?.filters?.group || []) as Array<{ name: string; slug?: string; id?: string }>;
-        const articles = (filtersRes?.article || filtersRes?.data?.filters?.article || []) as Array<{ name: string; slug?: string; id?: string }>;
-
-        const searchAliases = tokens.flatMap((t) => TAXONOMY_ALIASES[t] || TAXONOMY_ALIASES[normalizeStem(t)] || []);
-
-        const matchedGroup = groups.find((g) => {
-          const gName = String(g.name || '').toLowerCase().trim();
-          const gSlug = String(g.slug || '').toLowerCase().trim();
-          const gStem = normalizeStem(gName);
-          const slugStem = normalizeStem(gSlug);
-          
-          // Direct exact name or slug match
-          if (gSlug === searchTerm || gName === searchTerm || slugStem === stems[0] || gStem === stems[0]) {
-            return true;
-          }
-          // Check known taxonomy synonyms (e.g. bangles -> bangles, kada, valayal)
-          if (searchAliases.some((alias) => gSlug === alias || gName === alias || slugStem === normalizeStem(alias))) {
-            return true;
-          }
-          return false;
-        });
-
-        const matchedArticle = articles.find((a) => {
-          const aName = String(a.name || '').toLowerCase().trim();
-          const aSlug = String(a.slug || a.name || '').toLowerCase().trim();
-          const aStem = normalizeStem(aName);
-          return (
-            aName === searchTerm ||
-            aStem === stems[0] ||
-            searchAliases.some((alias) => aName === alias || aStem === normalizeStem(alias))
-          );
-        });
-
-        if (matchedGroup) {
-          erpQuery.group = matchedGroup.slug || matchedGroup.name.toLowerCase();
-          if (matchedGroup.id) {
-            erpQuery.group_id = matchedGroup.id;
-          }
-          delete erpQuery.search;
-        } else if (matchedArticle) {
-          erpQuery.article = matchedArticle.name;
-          if (matchedArticle.id) {
-            erpQuery.article_id = matchedArticle.id;
-          }
-          delete erpQuery.search;
-        } else if (erpQuery.metal_type || erpQuery.type) {
-          // If metal or audience was identified and no remaining specific keyword, remove raw search
-          const remainingTokens = tokens.filter(
-            (t) =>
-              !['gold', 'silver', '916', '22k', '24k', '18k', '92.5', '925', 'sterling', 'men', 'mens', 'women', 'womens', 'ladies', 'kids', 'kid'].includes(t)
-          );
-          if (remainingTokens.length === 0) {
-            delete erpQuery.search;
-          }
-        }
-      }
+      });
     }
 
-    let body;
-    
-    // If we requested all items for sorting, try cache first
-    let cacheKey = '';
-    if (erpQuery.limit === undefined) {
-      cacheKey = getFullCatalogCacheKey(erpQuery);
-      const hit = fullCatalogCache.get(cacheKey);
-      if (hit && Date.now() - hit.at < CACHE_TTL_MS) {
-        // Deep clone so we don't sort the cached array in-place
-        body = JSON.parse(JSON.stringify(hit.body));
-      }
+    // PATH A: Unsorted Browsing (Real-Time Batched Over-fetching from ERP)
+    const cacheKey = getFullCatalogCacheKey(erpQuery) + `&limit=${originalLimit}&offset=${originalOffset}&has_image=${req.query.has_image}&priceMin=${priceMin}&priceMax=${priceMax}`;
+    const hit = fullCatalogCache.get(cacheKey);
+    if (hit && Date.now() - hit.at < CACHE_TTL_MS) {
+      return res.json(hit.body);
     }
 
-    if (!body) {
-      body = await fetchErpPublic('/catalog', erpQuery);
-      
-      // If we requested a huge limit but the ERP capped it (e.g. returned 50 or 200), we must paginate to get all items
-      if (body?.data?.items && body.data.total > body.data.items.length) {
-        const erpLimit = body.data.items.length;
-        const total = body.data.total;
-        for (let offset = erpLimit; offset < total; offset += erpLimit) {
-          const nextQuery = { ...erpQuery, offset: String(offset), limit: String(erpLimit) };
-          try {
-            const res = await fetchErpPublic('/catalog', nextQuery);
-            if (res?.data?.items) {
-              body.data.items.push(...res.data.items);
-            }
-          } catch (err) {
-            console.error('[catalog] Pagination fetch error for offset', offset, err);
-          }
-        }
-      }
+    const visibility = await getErpVisibility();
+    const metaMap = await getAllWebsiteItemMeta();
 
-      if (cacheKey && body?.data?.items) {
-        fullCatalogCache.set(cacheKey, { body: JSON.parse(JSON.stringify(body)), at: Date.now() });
-      }
-    }
-    
-    // Apply visibility filtering unless bypassed by admin
     const adminBypass = req.query.admin_bypass === 'true';
-    if (!adminBypass) {
-      const visibility = await getErpVisibility();
-      if (body?.data?.items && Array.isArray(body.data.items)) {
-        body.data.items = body.data.items.filter((item: any) => {
+
+    const collectedVisibleItems: any[] = [];
+    let erpOffset = 0;
+    const batchLimit = 50;
+    let erpTotal = 0;
+    const targetCount = originalOffset + originalLimit; // e.g. for page 2 (offset 24, limit 24), we need 48 visible items total, then slice last 24
+
+    while (collectedVisibleItems.length < targetCount) {
+      const batchQuery = { ...erpQuery, limit: String(batchLimit), offset: String(erpOffset) };
+      const batchRes = await fetchErpPublic('/catalog', batchQuery);
+      
+      if (!batchRes?.data?.items || batchRes.data.items.length === 0) break;
+      erpTotal = batchRes.data.total;
+
+      const filtered = batchRes.data.items.filter((item: any) => {
+        if (!adminBypass) {
           const groupSlug = String(item.group_slug || '').toLowerCase();
           const tag = String(item.tag_number || '');
-          if (visibility.visibleCategories.length > 0 && !visibility.visibleCategories.includes(groupSlug)) return false;
-          if (visibility.visibleProducts.length > 0 && !visibility.visibleProducts.includes(tag)) return false;
-          return true;
-        });
-        body.data.total = body.data.items.length;
-      }
-    }
-
-    // If query with raw search was sent and returned 0 items, try intelligent fallback lookup
-    if (searchTerm && (!body?.data?.items || body.data.items.length === 0) && erpQuery.search) {
-      const filtersRes = await getCachedFilters(erpQuery.branch_id);
-      const groups = (filtersRes?.group || filtersRes?.data?.filters?.group || []) as Array<{ name: string; slug?: string; id?: string }>;
-      const articles = (filtersRes?.article || filtersRes?.data?.filters?.article || []) as Array<{ name: string; slug?: string; id?: string }>;
-
-      const tokens = searchTerm.split(/\s+/).filter(Boolean);
-      const stems = tokens.map(normalizeStem);
-      const searchAliases = tokens.flatMap((t) => TAXONOMY_ALIASES[t] || TAXONOMY_ALIASES[normalizeStem(t)] || []);
-
-      const matchedGroup = groups.find((g) => {
-        const gName = String(g.name || '').toLowerCase();
-        const gSlug = String(g.slug || '').toLowerCase();
-        return (
-          stems.some((s) => normalizeStem(gName).includes(s) || normalizeStem(gSlug).includes(s)) ||
-          searchAliases.some((alias) => gSlug.includes(alias) || gName.includes(alias))
-        );
+          const hasCat = visibility.visibleCategories.length > 0;
+          const hasProd = visibility.visibleProducts.length > 0;
+          
+          if (hasCat || hasProd) {
+            const catVisible = visibility.visibleCategories.includes(groupSlug);
+            const prodVisible = visibility.visibleProducts.includes(tag);
+            if (!catVisible && !prodVisible) return false;
+          }
+        }
+        if (req.query.has_image === 'true' && !item.image_url && !item.pos_image_url && !(Array.isArray(item.website_images) && item.website_images.length > 0)) return false;
+        const price = item.display_price || 0;
+        if (!isNaN(priceMin) && priceMin > 0 && price < priceMin) return false;
+        if (!isNaN(priceMax) && priceMax > 0 && price > priceMax) return false;
+        return true;
       });
 
-      const matchedArticle = articles.find((a) => {
-        const aName = String(a.name || '').toLowerCase();
-        return (
-          stems.some((s) => normalizeStem(aName).includes(s)) ||
-          searchAliases.some((alias) => aName.includes(alias))
-        );
-      });
-
-      if (matchedGroup || matchedArticle) {
-        const fallbackQuery: Record<string, string | undefined> = { ...erpQuery };
-        delete fallbackQuery.search;
-        if (matchedGroup) {
-          fallbackQuery.group = matchedGroup.slug || matchedGroup.name.toLowerCase();
-          if (matchedGroup.id) fallbackQuery.group_id = matchedGroup.id;
-        }
-        if (matchedArticle) {
-          fallbackQuery.article = matchedArticle.name;
-          if (matchedArticle.id) fallbackQuery.article_id = matchedArticle.id;
-        }
-        const fallbackBody = await fetchErpPublic('/catalog', fallbackQuery);
-        if (fallbackBody?.data?.items && fallbackBody.data.items.length > 0) {
-          body = fallbackBody;
-        }
-      }
-    }
-
-    const metaMap = await getAllWebsiteItemMeta();
-    if (body?.data?.items && Array.isArray(body.data.items)) {
-      body.data.items = body.data.items.map((item: { tag_number?: string; description?: string | null }) =>
-        applyWebsiteDescription(item, metaMap),
-      );
+      collectedVisibleItems.push(...filtered.map((item: any) => applyWebsiteDescription(item, metaMap)));
       
-      if (!isNaN(priceMin) || !isNaN(priceMax)) {
-        body.data.items = body.data.items.filter((item: any) => {
-          const price = item.display_price || 0;
-          if (!isNaN(priceMin) && priceMin > 0 && price < priceMin) return false;
-          if (!isNaN(priceMax) && priceMax > 0 && price > priceMax) return false;
-          return true;
-        });
-      }
-
-      if (sort) {
-        if (sort === 'price_asc') {
-          body.data.items.sort((a: any, b: any) => (a.display_price || 0) - (b.display_price || 0));
-        } else if (sort === 'price_desc') {
-          body.data.items.sort((a: any, b: any) => (b.display_price || 0) - (a.display_price || 0));
-        } else if (sort === 'name_asc') {
-          body.data.items.sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || '')));
-        } else if (sort === 'name_desc') {
-          body.data.items.sort((a: any, b: any) => String(b.name || '').localeCompare(String(a.name || '')));
-        } else if (sort === 'newest') {
-          body.data.items.sort((a: any, b: any) => {
-            const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-            const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-            if (timeB !== timeA && timeB && timeA) return timeB - timeA;
-            return String(b.id || b.tag_number || '').localeCompare(String(a.id || a.tag_number || ''));
-          });
-        }
-      }
-
-      // Apply pagination in Node since we deleted limit/offset to do visibility filtering
-      body.data.items = body.data.items.slice(originalOffset, originalOffset + originalLimit);
+      erpOffset += batchLimit;
+      if (batchRes.data.items.length < batchLimit) break; // Reached end
     }
+
+    const finalItems = collectedVisibleItems.slice(originalOffset, originalOffset + originalLimit);
+    const body = {
+      data: {
+        items: finalItems,
+        total: erpTotal // Return raw total for stable pagination
+      }
+    };
+
+    fullCatalogCache.set(cacheKey, { body: JSON.parse(JSON.stringify(body)), at: Date.now() });
     res.json(body);
   } catch (err) {
     handleErpError(err, res);
@@ -385,7 +268,12 @@ router.get('/filters', async (req: Request, res: Response) => {
     const adminBypass = req.query.admin_bypass === 'true';
     if (!adminBypass) {
       const visibility = await getErpVisibility();
-      if (visibility.visibleCategories.length > 0) {
+      const hasCat = visibility.visibleCategories.length > 0;
+      const hasProd = visibility.visibleProducts.length > 0;
+      
+      // If they only use visibleCategories, we can filter the sidebar. 
+      // If they use visibleProducts, we don't filter the sidebar so they can still click categories that have specific products visible.
+      if (hasCat && !hasProd) {
         if (body?.data?.filters?.group) {
           body.data.filters.group = body.data.filters.group.filter((g: any) => {
             const slug = g.slug || String(g.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -437,7 +325,7 @@ router.get('/suggestions', async (req: Request, res: Response) => {
         const filtersRes = await getCachedFilters(branchId);
         const groups = (filtersRes?.group || filtersRes?.data?.filters?.group || []) as Array<{ name: string; slug?: string }>;
         
-        let selectedGroups = [];
+        let selectedGroups: any[] = [];
         if (config.trendingCategories && config.trendingCategories.length > 0) {
           selectedGroups = groups.filter(g => {
             const catSlug = g.slug || g.name.replace(/[^a-z0-9]+/g, '-').toLowerCase().replace(/^-|-$/g, '');

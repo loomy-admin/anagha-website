@@ -146,7 +146,21 @@ export default function CheckoutThanks() {
         </div>
       ) : null}
 
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+      <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-3">
+        {session?.erp_bill_id ? (
+          <a
+            href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4001'}/api/site/invoice/${session.erp_bill_id}`}
+            download={`Invoice-${session.erp_bill_number || session.erp_bill_id}.pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 border border-[#032C5E] text-[#032C5E] bg-white hover:bg-[#032C5E] hover:text-white transition-colors text-xs font-bold uppercase tracking-widest px-8 py-3 rounded-full"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            Download PDF
+          </a>
+        ) : null}
         <Link
           href="/account/orders"
           className="inline-flex bg-[#032C5E] text-white text-xs font-bold uppercase tracking-widest px-8 py-3 rounded-full"

@@ -1,6 +1,4 @@
-import 'server-only';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
+
 
 interface HeroMeta {
   filename: string | null;
@@ -9,22 +7,10 @@ interface HeroMeta {
   uploadedAt: string | null;
 }
 
-async function getHeroMeta(): Promise<HeroMeta> {
-  try {
-    const metaPath = path.join(process.cwd(), 'public', 'uploads', 'metadata.json');
-    const raw = await readFile(metaPath, 'utf8');
-    const meta = JSON.parse(raw);
-    return meta.hero as HeroMeta;
-  } catch {
-    return { filename: null, type: null, originalName: null, uploadedAt: null };
-  }
-}
+export default async function Hero({ meta = { filename: null, type: null, originalName: null, uploadedAt: null } }: { meta?: HeroMeta | null }) {
 
-export default async function Hero() {
-  const meta = await getHeroMeta();
-
-  const src = meta.filename ? `/uploads/${meta.filename}` : '/images/hero_banner.avif';
-  const isVideo = meta.type === 'video';
+  const src = meta?.filename ? `/uploads/${meta.filename}` : '/images/hero_banner.avif';
+  const isVideo = meta?.type === 'video';
 
   return (
     <section className="relative w-full h-[60vh] min-h-[350px] md:min-h-[400px] md:h-[520px] lg:h-[600px] overflow-hidden bg-gray-100">

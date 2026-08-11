@@ -34,7 +34,7 @@ const YouTubeIcon = () => (
 
 
 export default function Footer() {
-  const { whatsapp, email } = useContactInfo();
+  const { whatsapp, email, instagram, youtube } = useContactInfo();
   return (
     <footer className="bg-[#041d36] text-white pt-16 pb-8 font-sans overflow-x-clip w-full max-w-[100vw]">
       <div className="max-w-[1400px] mx-auto px-6 xl:px-12">
@@ -87,16 +87,20 @@ export default function Footer() {
           {/* Socials */}
           <div className="flex items-center gap-4">
             <span className="text-[13px] text-gray-300">Follow us on</span>
-            <div className="flex items-center gap-2">
+            <div className="flex gap-4">
               <a href={`https://wa.me/${whatsapp.replace(/[^0-9]/g, '')}`} aria-label="WhatsApp" className="w-8 h-8 rounded-full bg-white flex items-center justify-center hover:bg-gray-200 transition-colors">
                 <WhatsAppIcon />
               </a>
-              <a href="https://www.instagram.com/anaghasilver_92.5?igsh=dnRiOTY4YWlzb2oy" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="w-8 h-8 rounded-full bg-white flex items-center justify-center hover:bg-gray-200 transition-colors">
-                <InstagramIcon />
-              </a>
-              <a href="#" aria-label="YouTube" className="w-8 h-8 rounded-full bg-white flex items-center justify-center hover:bg-gray-200 transition-colors">
-                <YouTubeIcon />
-              </a>
+              {instagram && (
+                <a href={instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="w-8 h-8 rounded-full bg-white flex items-center justify-center hover:bg-gray-200 transition-colors">
+                  <InstagramIcon />
+                </a>
+              )}
+              {youtube && (
+                <a href={youtube} target="_blank" rel="noopener noreferrer" aria-label="YouTube" className="w-8 h-8 rounded-full bg-white flex items-center justify-center hover:bg-gray-200 transition-colors">
+                  <YouTubeIcon />
+                </a>
+              )}
             </div>
           </div>
 

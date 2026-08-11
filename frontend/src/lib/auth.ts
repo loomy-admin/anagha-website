@@ -93,6 +93,20 @@ export async function loginAccount(input: { email: string; password: string }) {
   return body.data as WebsiteCustomer;
 }
 
+export async function googleLogin(credential: string) {
+  const res = await fetch('/api/auth/google', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ credential }),
+  });
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(body.error || 'Google Sign-In failed');
+  }
+  return body.data as WebsiteCustomer;
+}
+
 export async function logoutAccount() {
   const res = await fetch('/api/auth/logout', {
     method: 'POST',

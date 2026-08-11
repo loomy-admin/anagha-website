@@ -35,7 +35,7 @@ export default function CategoryProductsEditor({
             offset: 0,
             admin_bypass: 'true',
           }),
-          fetch('/api/upload/erp-visibility').then(r => r.ok ? r.json() : {}).catch(() => ({})),
+          fetch('/api/upload/erp-visibility').then(r => r.ok ? r.json() : {}).catch(() => ({})) as Promise<any>,
         ]);
         if (cancelled) return;
         setItems(data.items || []);

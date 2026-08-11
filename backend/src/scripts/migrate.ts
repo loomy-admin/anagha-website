@@ -144,6 +144,30 @@ async function main() {
 
   await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS shipping_address JSONB DEFAULT '{}'::jsonb`;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS cached_catalog_items (
+      tag_number TEXT PRIMARY KEY,
+      id TEXT,
+      group_slug TEXT,
+      type_slug TEXT,
+      article_slug TEXT,
+      metal_type TEXT,
+      purity TEXT,
+      display_price REAL,
+      has_image BOOLEAN DEFAULT false,
+      erp_created_at TIMESTAMPTZ,
+      data JSONB NOT NULL,
+      synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  await sql`CREATE INDEX IF NOT EXISTS group_price_idx ON cached_catalog_items (group_slug, display_price)`;
+  await sql`CREATE INDEX IF NOT EXISTS type_price_idx ON cached_catalog_items (type_slug, display_price)`;
+  await sql`CREATE INDEX IF NOT EXISTS article_price_idx ON cached_catalog_items (article_slug, display_price)`;
+  await sql`CREATE INDEX IF NOT EXISTS group_date_idx ON cached_catalog_items (group_slug, erp_created_at)`;
+  await sql`CREATE INDEX IF NOT EXISTS type_date_idx ON cached_catalog_items (type_slug, erp_created_at)`;
+  await sql`CREATE INDEX IF NOT EXISTS article_date_idx ON cached_catalog_items (article_slug, erp_created_at)`;
+
   console.log('Migration complete.');
 }
 

@@ -62,78 +62,52 @@ export default function ProductGallery({
   };
 
   return (
-    <div className="w-full flex flex-col items-center">
-      <div className="w-full aspect-square bg-[#f8f8f8] rounded-lg overflow-hidden flex items-center justify-center p-8 sm:p-12 relative group max-w-[500px]">
-        <button
-          onClick={handleToggleWishlist}
-          aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
-          className="absolute top-4 right-4 sm:top-6 sm:right-6 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center transition-colors z-10 group/heart"
-        >
-          <svg 
-            xmlns="http://www.w3.org/2000/svg" 
-            className={`w-5 h-5 transition-transform duration-300 ${isWishlisted ? 'scale-110' : 'group-hover/heart:scale-110 group-hover/heart:stroke-red-400'}`}
-            fill={isWishlisted ? "#ef4444" : "none"} 
-            stroke={isWishlisted ? "#ef4444" : "#9ca3af"} 
-            viewBox="0 0 24 24" 
-            strokeWidth="2"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-          </svg>
-        </button>
+    <div className="flex flex-col gap-4">
+      <div className="relative aspect-square bg-[#f8f9fa] rounded flex items-center justify-center p-8 group">
         {current ? (
           <img src={current} alt={alt} className="w-full h-full object-contain" />
         ) : (
-          <span className="text-gray-300 text-sm">No image available</span>
+          <svg className="w-16 h-16 text-gray-200" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.41a2.25 2.25 0 013.182 0l2.909 2.91m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+          </svg>
         )}
+        <button 
+          onClick={handleToggleWishlist}
+          className="absolute top-4 right-4 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-[0_2px_8px_rgba(0,0,0,0.08)] hover:scale-105 transition-transform z-10"
+        >
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            className={`h-5 w-5 transition-colors ${isWishlisted ? 'text-rose-500' : 'text-gray-400'}`}
+            fill={isWishlisted ? "currentColor" : "none"} 
+            viewBox="0 0 24 24" 
+            stroke={isWishlisted ? "currentColor" : "currentColor"}
+            strokeWidth={isWishlisted ? 1 : 1.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+          </svg>
+        </button>
       </div>
 
-      <div className="mt-6 sm:mt-8 w-full flex flex-wrap items-center justify-center gap-2 sm:gap-3">
-        {slots.map((slot) => {
-          if (slot.type === 'image' && slot.url) {
-            const selected = slot.index === active;
+      {realImages.length > 1 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          {realImages.map((url, index) => {
+            const selected = active === index;
             return (
               <button
-                key={`img-${slot.index}`}
+                key={`img-${index}`}
                 type="button"
-                onClick={() => setActive(slot.index)}
-                className={`w-16 h-16 sm:w-20 sm:h-20 p-1 flex items-center justify-center border-2 transition-colors ${
+                onClick={() => setActive(index)}
+                className={`w-16 h-16 sm:w-20 sm:h-20 p-1 flex items-center justify-center border-2 transition-colors shrink-0 ${
                   selected ? 'border-[#032C5E]' : 'border-gray-200 hover:border-gray-300'
                 }`}
-                aria-label={`View image ${slot.index + 1}`}
+                aria-label={`View image ${index + 1}`}
               >
-                <img src={slot.url} alt="" className="w-full h-full object-contain" />
+                <img src={url} alt="" className="w-full h-full object-contain" />
               </button>
             );
-          }
-
-          if (slot.type === 'video') {
-            return (
-              <div
-                key={`vid-${slot.index}`}
-                className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-50 border border-gray-200 flex flex-col items-center justify-center"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 sm:h-7 sm:w-7 text-gray-400 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold tracking-tight">Video</span>
-              </div>
-            );
-          }
-
-          return (
-            <div
-              key={`ph-${slot.index}`}
-              className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-50 border border-gray-200 flex flex-col items-center justify-center"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 sm:h-7 sm:w-7 text-gray-400 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <span className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-bold tracking-tight">Image</span>
-            </div>
-          );
-        })}
-      </div>
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -15,7 +15,7 @@ router.get('/', async (_req: Request, res: Response) => {
 
 router.put('/', async (req: Request, res: Response) => {
   try {
-    const { whatsapp, email, phone, corporateEmail, salesEmail, address1, address2 } = req.body;
+    const { whatsapp, email, phone, corporateEmail, salesEmail, instagram, youtube, address1, address2, addresses } = req.body;
     
     await setContactInfo({ 
       whatsapp: String(whatsapp || '').trim(), 
@@ -24,7 +24,10 @@ router.put('/', async (req: Request, res: Response) => {
       corporateEmail: String(corporateEmail || '').trim(),
       salesEmail: String(salesEmail || '').trim(),
       address1: String(address1 || '').trim(),
-      address2: String(address2 || '').trim()
+      address2: String(address2 || '').trim(),
+      instagram: String(instagram || '').trim(),
+      youtube: String(youtube || '').trim(),
+      addresses: Array.isArray(addresses) ? addresses.map(String) : [],
     });
     
     res.json({ success: true });

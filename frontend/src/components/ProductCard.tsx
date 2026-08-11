@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { type CatalogItem, formatDisplayPrice } from '@/lib/erpCatalog';
 import { isInWishlist, toggleWishlist, WISHLIST_CHANGED_EVENT, type WishlistItem } from '@/lib/wishlist';
 
@@ -71,11 +72,14 @@ export default function ProductCard({ product }: { product: CatalogItem }) {
 
       <div className="relative w-full aspect-square bg-[#fafafa] overflow-hidden shrink-0">
         <div className="absolute inset-0 p-4 sm:p-6 flex items-center justify-center">
-          {product.image_url ? (
-            <img
-              src={product.image_url}
+          {(product.image_url || (Array.isArray(product.website_images) && product.website_images.length > 0)) ? (
+            <Image
+              src={product.image_url || (Array.isArray(product.website_images) ? product.website_images[0] : '')}
               alt={product.name}
-              className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-500 mix-blend-multiply"
+              fill
+              sizes="(max-width: 768px) 50vw, 25vw"
+              loading="lazy"
+              className="object-contain group-hover:scale-105 transition-transform duration-500 mix-blend-multiply p-2"
             />
           ) : (
             <div className="text-gray-300 text-sm text-center px-4">No image</div>

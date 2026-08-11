@@ -284,6 +284,10 @@ function getLocalCatalog(params: Record<string, string | number | undefined> = {
     });
   }
 
+  if (params.has_image === 'true') {
+    list = list.filter((item) => !!item.image_url || !!item.pos_image_url || (item.website_images && item.website_images.length > 0));
+  }
+
   const sort = String(params.sort || '').trim().toLowerCase();
   if (sort === 'price_asc') {
     list.sort((a, b) => (a.display_price || 0) - (b.display_price || 0));
@@ -295,6 +299,12 @@ function getLocalCatalog(params: Record<string, string | number | undefined> = {
     list.sort((a, b) => (b.name || '').localeCompare(a.name || ''));
   } else if (sort === 'newest') {
     list.sort((a, b) => (b.tag_number || '').localeCompare(a.tag_number || ''));
+  } else if (sort === 'image_first') {
+    list.sort((a, b) => {
+      const aHasImg = !!a.image_url || !!a.pos_image_url || (a.website_images && a.website_images.length > 0) ? 1 : 0;
+      const bHasImg = !!b.image_url || !!b.pos_image_url || (b.website_images && b.website_images.length > 0) ? 1 : 0;
+      return bHasImg - aHasImg;
+    });
   }
 
   const offset = Number(params.offset) || 0;

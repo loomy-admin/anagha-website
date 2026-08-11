@@ -10,8 +10,9 @@ export default function AdminContactInfo() {
   const [phone, setPhone] = useState('');
   const [corporateEmail, setCorporateEmail] = useState('');
   const [salesEmail, setSalesEmail] = useState('');
-  const [address1, setAddress1] = useState('');
-  const [address2, setAddress2] = useState('');
+  const [instagram, setInstagram] = useState('');
+  const [youtube, setYoutube] = useState('');
+  const [addresses, setAddresses] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -25,8 +26,9 @@ export default function AdminContactInfo() {
         setPhone(data.phone || '');
         setCorporateEmail(data.corporateEmail || '');
         setSalesEmail(data.salesEmail || '');
-        setAddress1(data.address1 || '');
-        setAddress2(data.address2 || '');
+        setInstagram(data.instagram || '');
+        setYoutube(data.youtube || '');
+        setAddresses(data.addresses || []);
       })
       .catch((err) => console.error(err))
       .finally(() => setLoading(false));
@@ -40,7 +42,7 @@ export default function AdminContactInfo() {
       const res = await fetch('/api/upload/contact', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ whatsapp, email, phone, corporateEmail, salesEmail, address1, address2 }),
+        body: JSON.stringify({ whatsapp, email, phone, corporateEmail, salesEmail, instagram, youtube, addresses }),
       });
       if (res.ok) {
         setMessage('Contact info saved successfully!');
@@ -140,28 +142,75 @@ export default function AdminContactInfo() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-bold text-navy mb-2">Office Address 1 (Hyderabad)</label>
-                <textarea
-                  required
-                  rows={4}
-                  value={address1}
-                  onChange={(e) => setAddress1(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-rose-500"
-                  placeholder="Enter multi-line address"
-                />
+              <div className="pt-4 border-t border-gray-100">
+                <h3 className="text-lg font-bold text-navy mb-4">Social Media Links</h3>
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-bold text-navy mb-2">Instagram URL</label>
+                    <input
+                      type="url"
+                      value={instagram}
+                      onChange={(e) => setInstagram(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                      placeholder="e.g. https://instagram.com/..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-navy mb-2">YouTube URL</label>
+                    <input
+                      type="url"
+                      value={youtube}
+                      onChange={(e) => setYoutube(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                      placeholder="e.g. https://youtube.com/..."
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-bold text-navy mb-2">Office Address 2 (Mumbai)</label>
-                <textarea
-                  required
-                  rows={4}
-                  value={address2}
-                  onChange={(e) => setAddress2(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-rose-500"
-                  placeholder="Enter multi-line address"
-                />
+              <div className="pt-4 border-t border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-navy">Office Addresses</h3>
+                  <button
+                    type="button"
+                    onClick={() => setAddresses([...addresses, ''])}
+                    className="text-sm font-bold text-rose-600 hover:text-rose-700 uppercase tracking-widest border border-rose-200 hover:border-rose-300 rounded-full px-4 py-1.5 transition-colors"
+                  >
+                    + Add Address
+                  </button>
+                </div>
+                
+                <div className="space-y-6">
+                  {addresses.map((addr, idx) => (
+                    <div key={idx} className="relative bg-gray-50 rounded-xl p-4 border border-gray-100">
+                      <div className="flex justify-between mb-2">
+                        <label className="block text-sm font-bold text-navy">Address {idx + 1}</label>
+                        <button
+                          type="button"
+                          onClick={() => setAddresses(addresses.filter((_, i) => i !== idx))}
+                          className="text-xs text-red-500 font-bold hover:underline"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <textarea
+                        required
+                        rows={4}
+                        value={addr}
+                        onChange={(e) => {
+                          const newAddrs = [...addresses];
+                          newAddrs[idx] = e.target.value;
+                          setAddresses(newAddrs);
+                        }}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-rose-500 bg-white"
+                        placeholder="Enter multi-line address"
+                      />
+                    </div>
+                  ))}
+                  {addresses.length === 0 && (
+                    <p className="text-sm text-gray-500 italic">No office addresses added yet.</p>
+                  )}
+                </div>
               </div>
 
               {message && (

@@ -184,6 +184,7 @@ export function clearCartItem() {
 export async function createCheckoutSession(input: {
   tag_number?: string;
   tag_numbers?: string[];
+  shippingAddress?: any;
 }) {
   const tags = (input.tag_numbers?.length
     ? input.tag_numbers
@@ -195,6 +196,9 @@ export async function createCheckoutSession(input: {
     .filter(Boolean);
 
   const payload: any = tags.length === 1 ? { tag_number: tags[0] } : { tag_numbers: tags };
+  if (input.shippingAddress) {
+    payload.shippingAddress = input.shippingAddress;
+  }
 
   const res = await fetch('/api/checkout/session', {
     method: 'POST',

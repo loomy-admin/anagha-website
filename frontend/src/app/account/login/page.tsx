@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
-import { loginAccount } from '@/lib/auth';
+import { loginAccount, googleLogin } from '@/lib/auth';
+import { GoogleLogin } from '@react-oauth/google';
 
 function LoginForm() {
   const router = useRouter();
@@ -76,6 +77,34 @@ function LoginForm() {
           {submitting ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
+
+      <div className="mt-6 flex items-center">
+        <div className="flex-1 border-t border-gray-200"></div>
+        <div className="px-3 text-xs text-gray-400 uppercase tracking-widest">Or continue with</div>
+        <div className="flex-1 border-t border-gray-200"></div>
+      </div>
+
+      <div className="mt-6 flex justify-center">
+        <GoogleLogin
+          onSuccess={async (credentialResponse) => {
+            if (submitting || !credentialResponse.credential) return;
+            setSubmitting(true);
+            setError(null);
+            try {
+              await googleLogin(credentialResponse.credential);
+              router.replace(next.startsWith('/') ? next : '/jewellery');
+              router.refresh();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Google Sign In failed');
+              setSubmitting(false);
+            }
+          }}
+          onError={() => {
+            setError('Google Sign In failed');
+          }}
+          shape="pill"
+        />
+      </div>
 
       <p className="mt-6 text-sm text-gray-500 text-center">
         New here?{' '}

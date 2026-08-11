@@ -19,7 +19,7 @@ const PinIcon = () => (
 );
 
 export default function ContactUs() {
-  const { whatsapp, email, phone, corporateEmail, salesEmail, address1, address2 } = useContactInfo();
+  const { whatsapp, email, phone, corporateEmail, salesEmail, addresses } = useContactInfo();
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', query: '' });
   const [submitted, setSubmitted] = useState(false);
 
@@ -108,30 +108,25 @@ export default function ContactUs() {
                 </div>
               </div>
 
-              {/* Office Address */}
-              <div>
-                <h3 className="text-[#f1592a] font-semibold text-[15px] mb-4 font-domine">Office Address</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-[13.5px] text-[#4a4a4a] leading-relaxed">
-                  <div>
-                    <div className="flex items-start gap-1.5 mb-2">
-                      <PinIcon />
-                      <span className="text-[#4a4a4a] font-semibold">Address 1</span>
-                    </div>
-                    {address1.split('\n').map((line, i) => (
-                      <p key={i}>{line}</p>
-                    ))}
-                  </div>
-                  <div>
-                    <div className="flex items-start gap-1.5 mb-2">
-                      <PinIcon />
-                      <span className="text-[#4a4a4a] font-semibold">Address 2</span>
-                    </div>
-                    {address2.split('\n').map((line, i) => (
-                      <p key={i}>{line}</p>
+              {/* Office Addresses */}
+              {addresses && addresses.length > 0 && (
+                <div>
+                  <h3 className="text-[#f1592a] font-semibold text-[15px] mb-4 font-domine">Office Addresses</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-[13.5px] text-[#4a4a4a] leading-relaxed">
+                    {addresses.map((addr, idx) => (
+                      <div key={idx}>
+                        <div className="flex items-start gap-1.5 mb-2">
+                          <PinIcon />
+                          <span className="text-[#4a4a4a] font-semibold">Address {idx + 1}</span>
+                        </div>
+                        {addr.split('\n').map((line, i) => (
+                          <p key={i}>{line}</p>
+                        ))}
+                      </div>
                     ))}
                   </div>
                 </div>
-              </div>
+              )}
 
             </div>
 

@@ -81,6 +81,9 @@ export default async function ProductDetailPage({
             netWeight={product.net_weight}
             grossWeight={product.gross_weight}
             description={product.description}
+            purity={product.purity}
+            metalType={product.metal_type}
+            group={product.group}
           />
         </div>
       </div>

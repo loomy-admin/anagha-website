@@ -9,6 +9,8 @@ import heroRoutes from './routes/hero.js';
 import headerRoutes, { getHeaderSelection } from './routes/header.js';
 import groupImagesRoutes, { getGroupImages } from './routes/groupImages.js';
 import siteInvoiceRoutes from './routes/siteInvoice.js';
+import landingConfigRoutes from './routes/landingConfig.js';
+import policiesConfigRoutes from './routes/policiesConfig.js';
 import categoriesRoutes from './routes/categories.js';
 import offerPlanRoutes from './routes/offerPlan.js';
 import offersRoutes from './routes/offers.js';
@@ -20,6 +22,7 @@ import standaloneBannerRoutes from './routes/standaloneBanner.js';
 import jewelleryCategoriesRoutes from './routes/jewelleryCategories.js';
 import jewelleryProductsRoutes from './routes/jewelleryProducts.js';
 import websiteImagesRoutes from './routes/websiteImages.js';
+import { syncCatalogToDb } from './lib/syncCatalog.js';
 import itemMetaRoutes from './routes/itemMeta.js';
 import erpVisibilityRoutes from './routes/erpVisibility.js';
 import contactInfoRoutes from './routes/contactInfo.js';
@@ -75,9 +78,12 @@ app.get('/api/site/group-images', async (_req, res) => {
 /** Public bill PDF iframe — same ERP host as checkout (ERP_API_URL). */
 app.use('/api/site/invoice', siteInvoiceRoutes);
 app.use('/api/site/contact', contactInfoRoutes);
+app.use('/api/site/policies', policiesConfigRoutes);
 app.use('/api/site/search-suggestions', searchSuggestionsRoutes);
+app.use('/api/site/landing', landingConfigRoutes);
 
 app.use('/api/upload', requireAdmin);
+app.use('/api/upload/landing', landingConfigRoutes);
 app.use('/api/upload/hero', heroRoutes);
 app.use('/api/upload/header', headerRoutes);
 app.use('/api/upload/group-images', groupImagesRoutes);
@@ -104,6 +110,15 @@ app.use('/api/auth', authRoutes);
 // Checkout: reserve → Razorpay → ERP bill on success
 app.use('/api/checkout', checkoutRoutes);
 
+// Admin route to trigger sync manually
+app.post('/api/admin/sync-catalog', async (req, res) => {
+  if (req.headers.authorization !== `Bearer ${process.env.ADMIN_TOKEN}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  syncCatalogToDb().catch(console.error);
+  res.json({ success: true, message: 'Sync started in background' });
+});
+
 app.use(
   (
     err: Error,
@@ -119,4 +134,12 @@ app.use(
 app.listen(PORT, () => {
   console.log(`Anagha API listening on http://localhost:${PORT}`);
   console.log(`Uploads directory: ${path.resolve(__dirname, '..', 'uploads')}`);
+
+  // Run catalog sync every 15 minutes
+  setInterval(() => {
+    syncCatalogToDb().catch(console.error);
+  }, 15 * 60 * 1000);
+  
+  // Start one immediately on boot
+  syncCatalogToDb().catch(console.error);
 });
