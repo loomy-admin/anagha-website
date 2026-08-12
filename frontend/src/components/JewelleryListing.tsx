@@ -51,6 +51,7 @@ type ActiveFilters = {
   sort?: string;
   priceMin?: number;
   priceMax?: number;
+  hasImage?: boolean;
 };
 
 type FilterOptions = {
@@ -233,7 +234,7 @@ function FiltersBody({
   const articleOptions = mergeArticleOptions(filterOptions.article, active.articles);
   const hasAnyOptions =
     filterOptions.type.length > 0
-    || (!category && filterOptions.group.length > 0)
+    || filterOptions.group.length > 0
     || articleOptions.length > 0
     || filterOptions.purity.length > 0;
 
@@ -251,6 +252,33 @@ function FiltersBody({
         </div>
       ) : (
         <div className="p-5 space-y-8">
+          <div>
+            <h3 className="font-domine text-[#222] text-[16px] mb-4 font-bold border-b border-gray-100 pb-2">
+              Media
+            </h3>
+            <div className="space-y-3">
+              <button
+                type="button"
+                className="w-full text-left flex items-center gap-3 group transition-all"
+                onClick={() => setActive((prev) => ({ ...prev, hasImage: !prev.hasImage, articles: [] }))}
+              >
+                <div
+                  className={`w-[18px] h-[18px] flex-shrink-0 rounded-[4px] border-[1.5px] flex items-center justify-center transition-all duration-200 ${
+                    active.hasImage
+                      ? 'border-[#032C5E] bg-[#032C5E] text-white shadow-sm'
+                      : 'border-gray-300 bg-white text-transparent group-hover:border-gray-400'
+                  }`}
+                >
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </div>
+                <span className={`text-[13px] ${active.hasImage ? 'text-[#032C5E] font-medium' : 'text-[#444]'}`}>
+                  Only items with images
+                </span>
+              </button>
+            </div>
+          </div>
           {filterOptions.type.length > 0 ? (
             <FilterGroup
               title="Audience"
@@ -261,11 +289,11 @@ function FiltersBody({
               }
             />
           ) : null}
-          {!category && filterOptions.group.length > 0 ? (
+          {filterOptions.group.length > 0 ? (
             <FilterGroup
-              title="Category"
+              title={category ? "Groups" : "Category"}
               items={filterOptions.group}
-              selected={active.group}
+              selected={active.group || category}
               onSelect={(name) =>
                 setActive((prev) => ({ ...prev, group: name, articles: [] }))
               }
@@ -306,6 +334,7 @@ function countActiveFilters(active: ActiveFilters, category?: string) {
   if (!category && active.group) n += 1;
   n += active.articles.length;
   if (active.purity) n += 1;
+  if (active.hasImage) n += 1;
   return n;
 }
 
@@ -344,6 +373,7 @@ function listingCacheKey(
     sort: active.sort || '',
     priceMin: active.priceMin || 0,
     priceMax: active.priceMax || 0,
+    hasImage: !!active.hasImage,
     page: page || 1,
   });
 }
@@ -416,6 +446,7 @@ export default function JewelleryListing({ category, audience, article, search, 
       sort: prev.sort, // Preserve sort across categories
       priceMin: undefined,
       priceMax: undefined,
+      hasImage: prev.hasImage,
     }));
     setPage(1);
   }, [category, audienceType, articleName, searchTerm]);
@@ -455,7 +486,7 @@ export default function JewelleryListing({ category, audience, article, search, 
   const activeCount = countActiveFilters(active, category);
 
   const queryParams = useMemo(() => {
-    const limit = 48;
+    const limit = 24;
     const offset = (page - 1) * limit;
     const params: Record<string, string | number | undefined> = {
       limit,
@@ -479,6 +510,7 @@ export default function JewelleryListing({ category, audience, article, search, 
     if (active.sort) params.sort = active.sort;
     if (active.priceMin !== undefined) params.price_min = active.priceMin;
     if (active.priceMax !== undefined) params.price_max = active.priceMax;
+    if (active.hasImage) params.has_image = 'true';
     if (searchTerm) params.search = searchTerm;
     return params;
   }, [active, category, audienceType, searchTerm, page]);
@@ -563,7 +595,7 @@ export default function JewelleryListing({ category, audience, article, search, 
 
   const clearFilters = () => {
     startTransition(() => {
-      setActive({ articles: [], type: audienceType, sort: '' });
+      setActive({ articles: [], type: audienceType, sort: '', hasImage: false });
       setPage(1);
     });
   };
@@ -641,6 +673,7 @@ export default function JewelleryListing({ category, audience, article, search, 
                   }}
                 >
                   <option value="">Popular</option>
+                  <option value="image_first">Image First</option>
                   <option value="price_asc">Low to high</option>
                   <option value="price_desc">High to low</option>
                   <option value="newest">New items</option>

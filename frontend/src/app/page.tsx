@@ -13,37 +13,59 @@ import PromiseSection from '@/components/Promise';
 import Footer from '@/components/Footer';
 async function getMeta() {
   try {
-    const raw = await readFile(
-      path.join(process.cwd(), 'public', 'uploads', 'metadata.json'),
-      'utf8'
-    );
-    return JSON.parse(raw);
-  } catch {
-    return { hero: null, goldCategories: [], silverCategories: [], offers: [] };
+    const res = await fetch('http://127.0.0.1:4001/api/site/landing/content', {
+      next: { revalidate: 0 },
+    });
+    if (!res.ok) throw new Error('Failed to fetch landing content');
+    return await res.json();
+  } catch (err) {
+    console.error('Error fetching landing content:', err);
+    return {
+      hero: null,
+      goldCategories: [],
+      silverCategories: [],
+      offers: [],
+      landing_visibility: {}
+    };
   }
 }
 
-export default async function Home() {
+import { Suspense } from 'react';
+
+async function LandingContent() {
   const meta = await getMeta();
+  const visibility = meta.landing_visibility || {};
 
   return (
     <>
-      <Header />
-      <main className="flex flex-col gap-y-8 md:gap-y-12 pb-8 md:pb-12 overflow-x-clip w-full max-w-[100vw]">
-        <Hero />
+      {!visibility.hideHero && <Hero meta={meta.hero} />}
+      
+      {!visibility.hideCategories && (
         <Categories
           goldLive={meta.goldCategories || []}
           silverLive={meta.silverCategories || []}
           goldPlan={meta.goldPlan}
           silverPlan={meta.silverPlan}
+          hideGoldPlan={visibility.hideGoldPlan}
+          hideSilverPlan={visibility.hideSilverPlan}
         />
-        <Offers live={meta.offers || []} />
+      )}
+      
+      {!visibility.hideOffers && <Offers live={meta.offers || []} />}
+      
+      {!visibility.hideCollections && (
         <LatestCollections live={meta.collections || []} btnLink={meta.collectionsBtnLink} />
+      )}
+      
+      {!visibility.hideCurated && (
         <CuratedStyles liveSlots={meta.curatedSlots} liveTitles={meta.curatedTitles} />
+      )}
 
+      {!visibility.hideDesignLed && (
         <DesignLed liveImages={meta.designLedImages} liveLabels={meta.designLedLabels} />
+      )}
 
-        {/* Standalone Banner Section */}
+      {!visibility.hideBanner && (
         <section className="w-full">
           <img 
             src={meta.standaloneBanner ? `/uploads/${meta.standaloneBanner}` : "/images/banner_collection.webp"}
@@ -52,7 +74,9 @@ export default async function Home() {
             draggable={false}
           />
         </section>
+      )}
 
+      {!visibility.hideTestimonials && (
         <Testimonials 
           live={{
             images: meta.testimonialsImages || [],
@@ -60,8 +84,31 @@ export default async function Home() {
             texts:  meta.testimonialsTexts || [],
           }} 
         />
-        <AboutCompany />
-        <PromiseSection />
+      )}
+      
+      {!visibility.hideAbout && <AboutCompany data={meta.about} />}
+      
+      {!visibility.hidePromise && <PromiseSection labels={meta.promise} />}
+    </>
+  );
+}
+
+function LandingSkeleton() {
+  return (
+    <div className="w-full h-[60vh] bg-gray-50 flex items-center justify-center animate-pulse">
+      <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+    </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <>
+      <Header />
+      <main className="flex flex-col gap-y-8 md:gap-y-12 pb-8 md:pb-12 overflow-x-clip w-full max-w-[100vw]">
+        <Suspense fallback={<LandingSkeleton />}>
+          <LandingContent />
+        </Suspense>
       </main>
       <Footer />
     </>

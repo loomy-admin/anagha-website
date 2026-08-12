@@ -34,6 +34,13 @@ export default function AdminHome() {
       img: '/images/admin/landing_thumb.png',
       link: '/upload/search-suggestions',
       color: 'from-pink-500 to-rose-600',
+    },
+    {
+      title: 'Legal Policies',
+      desc: 'Edit the content for the Privacy Policy and Terms & Conditions pages.',
+      img: '/images/admin/landing_thumb.png',
+      link: '/upload/policies',
+      color: 'from-purple-500 to-fuchsia-600',
     }
   ];
 

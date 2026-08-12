@@ -55,7 +55,9 @@ const ITEMS = [
   }
 ];
 
-export default function anaghaPromise() {
+export default function PromiseSection({ labels }: { labels?: string[] }) {
+  const finalLabels = labels && labels.length === 6 ? labels : ITEMS.map(item => item.label);
+
   return (
     <section className="bg-white py-12 md:py-16 overflow-hidden" style={{ backgroundColor: '#ffffff' }}>
       <motion.div 
@@ -98,13 +100,10 @@ export default function anaghaPromise() {
                     </div>
                     {/* Label */}
                     <h4 
-                      className={`text-[#032C5E]/90 text-[13px] md:text-[14.5px] leading-tight font-medium mx-auto font-sans ${
-                        item.label === 'Personalised Video Consultations' 
-                        ? 'max-w-[160px] whitespace-normal' 
-                        : 'w-full whitespace-normal lg:whitespace-nowrap'
-                      }`}
+                      className="text-[#032C5E] font-inter text-[14px] sm:text-[15px] font-semibold leading-[1.3] px-2"
+                      style={{ letterSpacing: '-0.02em' }}
                     >
-                      {item.label}
+                      {finalLabels[idx]}
                     </h4>
                   </div>
                 ))}

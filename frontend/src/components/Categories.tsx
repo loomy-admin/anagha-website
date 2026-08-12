@@ -36,13 +36,15 @@ interface Props {
   silverLive?: Array<{ name?: string; filename?: string | null } | null>;
   goldPlan?: Partial<PlanData>;
   silverPlan?: Partial<PlanData>;
+  hideGoldPlan?: boolean;
+  hideSilverPlan?: boolean;
 }
 
 function sortByCountDesc(groups: CatalogFilterOption[]) {
   return [...groups].sort((a, b) => (b.count || 0) - (a.count || 0) || a.name.localeCompare(b.name));
 }
 
-export default function Categories({ silverPlan }: Props) {
+export default function Categories({ goldLive, silverLive, goldPlan, silverPlan, hideGoldPlan, hideSilverPlan }: Props) {
   const [groups, setGroups] = useState<CatalogFilterOption[]>([]);
   const [imageOverrides, setImageOverrides] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -142,9 +144,10 @@ export default function Categories({ silverPlan }: Props) {
             })}
           </motion.div>
         )}
-
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
+        {/* Silver Offer Plan Banner */}
+        {!hideSilverPlan && (
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.3 }}
           transition={{ duration: 0.8, ease: 'easeOut' }}
@@ -174,7 +177,8 @@ export default function Categories({ silverPlan }: Props) {
           >
             {plan.btnText}
           </a>
-        </motion.div>
+          </motion.div>
+        )}
       </div>
     </section>
   );

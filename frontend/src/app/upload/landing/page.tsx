@@ -176,6 +176,73 @@ function CategoryGrid({ type }: { type: 'gold' | 'silver' }) {
   );
 }
 
+/* ─── Section Visibility Panel ────────────────────────────── */
+function SectionVisibility() {
+  const [config, setConfig] = useState<Record<string, boolean> | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/upload/landing/config')
+      .then(r => r.json())
+      .then(d => setConfig(d))
+      .catch(console.error);
+  }, []);
+
+  const toggle = async (key: string) => {
+    if (!config) return;
+    const newConfig = { ...config, [key]: !config[key] };
+    setConfig(newConfig);
+    setSaving(true);
+    await fetch('/api/upload/landing/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newConfig)
+    });
+    setSaving(false);
+  };
+
+  if (!config) return null;
+
+  const sections = [
+    { key: 'hideHero', label: 'Hero Section' },
+    { key: 'hideCategories', label: 'Silver Categories' },
+    { key: 'hideOffers', label: 'Offers Carousel' },
+    { key: 'hideCollections', label: 'Latest Collections' },
+    { key: 'hideCurated', label: 'Curated Styles' },
+    { key: 'hideDesignLed', label: 'Design Led' },
+    { key: 'hideBanner', label: 'Standalone Banner' },
+    { key: 'hideTestimonials', label: 'Testimonials' },
+    { key: 'hideAbout', label: 'About Company' },
+    { key: 'hidePromise', label: 'Anagha Promise' },
+    { key: 'hideSilverPlan', label: 'Silver Offer Plan Banner' }
+  ];
+
+  return (
+    <section className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 mb-12">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h2 className="text-2xl font-display font-bold text-navy uppercase tracking-widest">Section Visibility</h2>
+          <p className="text-sm text-gray-500 mt-1">Toggle sections ON or OFF on the public home page.</p>
+        </div>
+        {saving && <span className="text-xs text-navy font-bold animate-pulse">SAVING...</span>}
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+        {sections.map(s => (
+          <div key={s.key} className="flex items-center justify-between bg-gray-50 p-4 rounded-xl border border-gray-100">
+            <span className="text-xs font-bold text-navy uppercase tracking-wider">{s.label}</span>
+            <button
+              onClick={() => toggle(s.key)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${!config[s.key] ? 'bg-green-500' : 'bg-gray-300'}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${!config[s.key] ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /* ─── Main upload page ─────────────────────────────────────── */
 export default function UploadPage() {
   const [heroFile, setHeroFile] = useState<File | null>(null);
@@ -231,6 +298,8 @@ export default function UploadPage() {
       <Header />
 
       <div className="max-w-[1600px] mx-auto px-8 py-12 space-y-20">
+
+        <SectionVisibility />
 
         {/* ── HERO ── */}
         <section className="space-y-5">
@@ -297,6 +366,12 @@ export default function UploadPage() {
 
         {/* ── TESTIMONIALS ── */}
         <TestimonialsEditor />
+
+        {/* ── ABOUT COMPANY ── */}
+        <AboutEditor />
+
+        {/* ── ANAGHA PROMISE ── */}
+        <PromiseEditor />
 
         {/* ── HEADER NAV — pick up to 8 ERP groups for storefront tabs ── */}
         <HeaderNavPicker />
@@ -411,6 +486,23 @@ function PlanEditor({ type }: { type: 'gold' | 'silver' }) {
 
       {/* Fields — only editable parts */}
       <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-3 gap-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Badge / Prefix</label>
+            <input value={badge || ''} onChange={e => setBadge(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-navy outline-none focus:border-coral bg-white w-full" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Highlight (Installment)</label>
+            <input value={installment || ''} onChange={e => setInstallment(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-navy outline-none focus:border-coral bg-white w-full" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Suffix</label>
+            <input value={suffix || ''} onChange={e => setSuffix(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-navy outline-none focus:border-coral bg-white w-full" />
+          </div>
+        </div>
         <div className="flex flex-col gap-1">
           <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Description</label>
           <input value={desc || ''} onChange={e => setDesc(e.target.value)}
@@ -443,10 +535,14 @@ function OffersEditor() {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
-    fetch('/api/upload/offers').then(r => r.json()).then((slots: (string | null)[]) => {
+    fetch('/api/upload/offers').then(r => r.json()).then((slotsRes: (string | null)[]) => {
+      const slots = Array.isArray(slotsRes) ? slotsRes : [];
       const len = Math.max(slots.length, OFFER_FALLBACKS.length);
       setPreviews(new Array(len).fill(null).map((_, i) => slots[i] ? `/uploads/${slots[i]}` : (OFFER_FALLBACKS[i] || null)));
       setFiles(new Array(len).fill(null));
+    }).catch(() => {
+      setPreviews(OFFER_FALLBACKS);
+      setFiles(new Array(OFFER_FALLBACKS.length).fill(null));
     });
   }, []);
 
@@ -1040,10 +1136,20 @@ function TestimonialsEditor() {
 
   useEffect(() => {
     fetch('/api/upload/testimonials').then(r => r.json()).then(d => {
-      const len = Math.max(d.names?.length || 0, TESTIMONIAL_REVIEWS.length);
-      setPreviews(new Array(len).fill(null).map((_, i) => d.images[i] ? `/uploads/${d.images[i]}` : (TESTIMONIAL_REVIEWS[i]?.img || null)));
-      setNames(new Array(len).fill('').map((_, i) => d.names[i] || TESTIMONIAL_DEFAULT_NAMES[i] || ''));
-      setTexts(new Array(len).fill('').map((_, i) => d.texts[i] || TESTIMONIAL_DEFAULT_TEXTS[i] || ''));
+      const names = Array.isArray(d?.names) ? d.names : [];
+      const texts = Array.isArray(d?.texts) ? d.texts : [];
+      const images = Array.isArray(d?.images) ? d.images : [];
+      const len = Math.max(names.length || 0, TESTIMONIAL_REVIEWS.length);
+      
+      setPreviews(new Array(len).fill(null).map((_, i) => images[i] ? `/uploads/${images[i]}` : (TESTIMONIAL_REVIEWS[i]?.img || null)));
+      setNames(new Array(len).fill('').map((_, i) => names[i] || TESTIMONIAL_DEFAULT_NAMES[i] || ''));
+      setTexts(new Array(len).fill('').map((_, i) => texts[i] || TESTIMONIAL_DEFAULT_TEXTS[i] || ''));
+      setFiles(new Array(len).fill(null));
+    }).catch(() => {
+      const len = TESTIMONIAL_REVIEWS.length;
+      setPreviews(new Array(len).fill(null).map((_, i) => TESTIMONIAL_REVIEWS[i]?.img || null));
+      setNames(new Array(len).fill('').map((_, i) => TESTIMONIAL_DEFAULT_NAMES[i] || ''));
+      setTexts(new Array(len).fill('').map((_, i) => TESTIMONIAL_DEFAULT_TEXTS[i] || ''));
       setFiles(new Array(len).fill(null));
     });
   }, []);
@@ -1154,6 +1260,121 @@ function TestimonialsEditor() {
                 <button onClick={() => reset(i)} className="text-[10px] text-gray-300 hover:text-red-400 font-black px-2 transition-colors">RESET</button>
               </div>
             </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── About Company Editor ────────────────────────────────────── */
+function AboutEditor() {
+  const defaultCols = [
+    { title: 'Anagha Jewellery Store - A Stellar Omnichannel Presence', text: "Anagha, founded in 2011, is one of India's largest e-commerce portals for fine jewellery. By seamlessly integrating online and physical retail channels, Anagha has transformed the way consumers experience jewellery shopping. With over 344 retail stores spread across the nation, we are committed to making exquisite fine jewellery accessible. Our omnichannel approach ensures that customers can explore Anagha's extensive collection of fine jewellery at our online jewellery store or a retail store near them. Whether browsing through the curated selection on the website or visiting one of our retail stores, customers have access to a wide range of exquisite designs crafted with precision and attention to detail." },
+    { title: 'Redefining the Jewellery Shopping Experience', text: "At Anagha, we're dedicated to enhancing your jewellery shopping experience with unmatched convenience through a highly developed team that ensures every question about your products gets answered. We also have a Lifetime Exchange and Buyback Policy ensuring you can shop with the peace of mind that your investment lasts a lifetime. If you're bored of hoarding outdated gold jewellery, our Big Gold Upgrade enables you to get an instant 1% benefit over the current market gold rate on all purities, while exploring Anagha's exquisite curated collections. To benchmark your jewellery shopping experience a step further, we offer free shipping on all online orders. And in case things don't work out as planned, you can rely on a hassle-free 30 Day Free Returns Policy so you can shop without a care in the world." },
+    { title: '7000+ Certified Jewellery Designs', text: "Our jewellery is certified by prestigious authorities such as BIS Hallmark, SGL, IGI, and GSI to ensure the authenticity and quality of every piece. Our extensive range of 7000+ contemporary creations across 100+ collections tells a unique story, each inspired by different facets of life. From gold and platinum to diamonds and gemstones, Anagha offers 100% certified jewellery designs, promising something to suit every mood, moment, and budget. Explore our wide range of categories, which includes gold and diamond rings, earrings, pendants, mangalsutras, bangles, engagement rings, bracelets and more." }
+  ];
+  const [cols, setCols] = useState<{ title: string; text: string }[]>(defaultCols);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch('http://127.0.0.1:4001/api/site/landing/content')
+      .then(r => r.json())
+      .then(d => {
+        if (d.about && d.about.length === 3) setCols(d.about);
+      })
+      .catch(console.error);
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    await fetch('/api/upload/landing/about', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cols)
+    });
+    setSaving(false);
+  };
+
+  const updateCol = (i: number, field: 'title'|'text', val: string) => {
+    setCols(prev => {
+      const n = [...prev];
+      n[i] = { ...n[i], [field]: val };
+      return n;
+    });
+  };
+
+  return (
+    <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 mb-12">
+      <div className="flex items-center justify-between mb-8 border-b border-gray-100 pb-4">
+        <div>
+          <h2 className="text-xl font-display font-bold text-navy uppercase tracking-widest">About Company</h2>
+        </div>
+        <button onClick={save} disabled={saving} className="px-6 py-2 rounded-full bg-[#032C5E] text-white text-[10px] font-black uppercase tracking-widest shadow-md hover:opacity-90 transition-all">
+          {saving ? 'Saving…' : 'Save About'}
+        </button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {cols.map((col, i) => (
+          <div key={i} className="flex flex-col gap-3">
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Column {i + 1} Title</label>
+            <input value={col.title} onChange={e => updateCol(i, 'title', e.target.value)} className="text-sm font-semibold text-navy border border-gray-200 rounded-lg p-2 outline-none focus:border-indigo-300 w-full" />
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-2">Column {i + 1} Text</label>
+            <textarea value={col.text} onChange={e => updateCol(i, 'text', e.target.value)} rows={15} className="text-xs text-gray-500 border border-gray-200 rounded-lg p-3 outline-none focus:border-indigo-300 w-full resize-none" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Anagha Promise Editor ────────────────────────────────────── */
+function PromiseEditor() {
+  const defaultLabels = [
+    '100% Certified Jewellery',
+    '100% Transparency',
+    'Free Shipping',
+    'No Compromise On Ethics',
+    'A world of designs',
+    'Personalised Video Consultations'
+  ];
+  const [labels, setLabels] = useState<string[]>(defaultLabels);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch('http://127.0.0.1:4001/api/site/landing/content')
+      .then(r => r.json())
+      .then(d => {
+        if (d.promise && d.promise.length === 6) setLabels(d.promise);
+      })
+      .catch(console.error);
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    await fetch('/api/upload/landing/promise', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(labels)
+    });
+    setSaving(false);
+  };
+
+  return (
+    <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 mb-12">
+      <div className="flex items-center justify-between mb-8 border-b border-gray-100 pb-4">
+        <div>
+          <h2 className="text-xl font-display font-bold text-navy uppercase tracking-widest">Anagha Promise</h2>
+        </div>
+        <button onClick={save} disabled={saving} className="px-6 py-2 rounded-full bg-[#032C5E] text-white text-[10px] font-black uppercase tracking-widest shadow-md hover:opacity-90 transition-all">
+          {saving ? 'Saving…' : 'Save Promise'}
+        </button>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+        {labels.map((lbl, i) => (
+          <div key={i} className="flex flex-col gap-2">
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Item {i + 1} Label</label>
+            <input value={lbl} onChange={e => { const n = [...labels]; n[i] = e.target.value; setLabels(n); }} className="text-sm font-semibold text-navy border border-gray-200 rounded-lg p-2 outline-none focus:border-indigo-300 w-full" />
           </div>
         ))}
       </div>

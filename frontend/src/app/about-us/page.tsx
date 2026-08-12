@@ -6,19 +6,28 @@ export const metadata = {
   description: 'Learn more about Anagha, India\'s leading destination for high-quality fine jewellery.',
 };
 
-export default function AboutUsPage() {
+const DEFAULT_ABOUT = [
+  { title: 'Anagha Jewellery Store - A Stellar Omnichannel Presence', text: "Anagha, founded in 2011, is one of India's largest e-commerce portals for fine jewellery. By seamlessly integrating online and physical retail channels, Anagha has transformed the way consumers experience jewellery shopping. With over 344 retail stores spread across the nation, we are committed to making exquisite fine jewellery accessible. Our omnichannel approach ensures that customers can explore Anagha's extensive collection of fine jewellery at our online jewellery store or a retail store near them. Whether browsing through the curated selection on the website or visiting one of our retail stores, customers have access to a wide range of exquisite designs crafted with precision and attention to detail." },
+  { title: 'Redefining the Jewellery Shopping Experience', text: "At Anagha, we're dedicated to enhancing your jewellery shopping experience with unmatched convenience through a highly developed team that ensures every question about your products gets answered. We also have a Lifetime Exchange and Buyback Policy ensuring you can shop with the peace of mind that your investment lasts a lifetime. If you're bored of hoarding outdated gold jewellery, our Big Gold Upgrade enables you to get an instant 1% benefit over the current market gold rate on all purities, while exploring Anagha's exquisite curated collections. To benchmark your jewellery shopping experience a step further, we offer free shipping on all online orders. And in case things don't work out as planned, you can rely on a hassle-free 30 Day Free Returns Policy so you can shop without a care in the world." },
+  { title: '7000+ Certified Jewellery Designs', text: "Our jewellery is certified by prestigious authorities such as BIS Hallmark, SGL, IGI, and GSI to ensure the authenticity and quality of every piece. Our extensive range of 7000+ contemporary creations across 100+ collections tells a unique story, each inspired by different facets of life. From gold and platinum to diamonds and gemstones, Anagha offers 100% certified jewellery designs, promising something to suit every mood, moment, and budget. Explore our wide range of categories, which includes gold and diamond rings, earrings, pendants, mangalsutras, bangles, engagement rings, bracelets and more." }
+];
+
+export default async function AboutUsPage() {
+  const meta: { about?: { title: string; text: string }[] } = await fetch('http://localhost:4001/api/site/landing/content', { next: { revalidate: 0 } }).then(res => res.json()).catch(() => ({}));
+  const aboutCols = meta.about && meta.about.length === 3 ? meta.about : DEFAULT_ABOUT;
+
   return (
     <>
       <Header />
-      <main className="w-full bg-white font-domine min-h-screen py-16 lg:py-24">
-        <div className="max-w-[1200px] mx-auto px-4 md:px-8">
+      <main className="w-full bg-[#fcfcfc] font-domine min-h-screen py-16 lg:py-24">
+        <div className="max-w-[1000px] mx-auto px-4 md:px-8">
           {/* Title Section */}
           <div className="flex flex-col items-center justify-center mb-16">
             <h1 className="text-[26px] md:text-[32px] font-domine font-bold tracking-wide text-[#222] uppercase text-center mb-4">
               ABOUT <span className="text-[#f1592a]">US</span>
             </h1>
 
-            {/* Decorative separator: line · dot · line */}
+            {/* Decorative separator */}
             <div className="flex items-center w-full max-w-[600px] gap-3">
               <div className="flex-1 h-px bg-gray-300"></div>
               <div className="w-[7px] h-[7px] rounded-full bg-[#f1592a] shrink-0"></div>
@@ -26,86 +35,24 @@ export default function AboutUsPage() {
             </div>
           </div>
 
-          {/* Content Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12 lg:gap-16 text-[#4a4a4a] text-[14px] md:text-[14.5px] leading-[1.85] text-justify">
-            
-            {/* Left Column */}
-            <div className="space-y-6">
-              <p>
-                <span className="float-left text-[54px] leading-[45px] pr-2 pt-2 text-[#4a4a4a] font-domine">
-                  E
-                </span>
-                stablished in 2011, Anagha is India's leading destination for high-quality fine jewellery with strikingly exquisite designs. As a digital-first, direct-to-consumer (DTC) brand, we are focused on delivering a seamless omnichannel experience and have grown to become India's largest digital-first omni-channel jewellery brand.
-              </p>
-              
-              <p>
-                We retail our contemporary lifestyle diamond, gold, platinum and studded jewellery under our flagship brand, Anagha. Our collections are available through our website, www.anagha.com, our mobile applications on iOS and Google Play Store, and our pan India network of stores bringing together the ease of digital discovery with the warmth of physical retail.
-              </p>
-              
-              <p className="text-[#c0505a]">
-                As a design-led brand, we offer over 8,000 unique designs created with a firm focus on craftsmanship, quality, and customer experience. Our award-winning design team pays close attention to detail, creating jewellery that reflects precision and modern elegance. With cutting-edge innovation and advanced technology integrated into our processes, we ensure that brilliance is carried through every stage - from design to delivery.
-              </p>
-            </div>
-
-            {/* Right Column */}
-            <div className="space-y-6">
-              <p>
-                Our wide range of offerings includes rings, earrings, necklaces, pendants, solitaires, bangles, bracelets, and chains - catering to diverse customer segments across varied price points and occasions. We design jewellery for women, men, and couples who value distinctive designs, contemporary styles, and often discover brands through digital and social platforms. Every piece is crafted to perfection with utmost care, offering customers the flexibility to customize gold purity and colour, as well as diamond clarity, to suit individual preferences.
-              </p>
-
-              <p>
-                Our stores have been instrumental in spreading the shine of Anagha and bringing us closer to our customers. With a world-class in-store experience, knowledgeable staff, and the dazzling beauty of fine jewellery, every Anagha boutique is designed to reflect our commitment to excellence.
-              </p>
-
-              <p>
-                To uphold transparency and trust, we offer certified jewellery from independent establishments such as GSI, IGI, and SGL, ensuring grading authenticity. We also provide a 30-Day Money-Back Guarantee and a Lifetime Exchange Policy, aligning with our ethos of customer centricity.
-              </p>
-            </div>
-
-          </div>
-
-          {/* ── Brand Story Section ── */}
-          <div className="mt-20 md:mt-28">
-            {/* Brand Story heading */}
-            <h2 className="text-[22px] md:text-[26px] font-domine font-bold text-[#222] text-center mb-12 tracking-wide">
-              Brand Story
-            </h2>
-
-            <div className="space-y-10 text-[14px] md:text-[14.5px] leading-[1.9] text-justify font-sans">
-
-              {/* Initial Foray */}
-              <div>
-                <h3 className="font-bold text-[#f1592a] text-[15px] mb-3 font-sans">Initial Foray</h3>
-                <p className="text-[#222]">
-                  The journey of Anagha started with the launch of 18k gold watches studded with precious stones in 1994. But, it soon grew into a 22K jeweller who presented a stunning range of gold and diamond jewellery. The term Anagha was coined to represent a gold ornament and Anagha's very first state-of-art jewellery factory with a proper <em>karigaar</em> park was set up in Hosur in Tamil Nadu.
+          {/* Dynamic Content Section */}
+          <div className="space-y-16 text-[#4a4a4a] text-[15px] leading-[1.85] text-justify font-sans bg-white p-8 md:p-12 lg:p-16 rounded-2xl shadow-sm border border-gray-100">
+            {aboutCols.map((col, idx) => (
+              <div key={idx} className="flex flex-col gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-[44px] h-[44px] shrink-0 bg-[#fff5f2] rounded-full flex items-center justify-center">
+                    <span className="text-[#f1592a] font-bold text-xl">{idx + 1}</span>
+                  </div>
+                  <h2 className="text-[20px] md:text-[22px] font-domine font-bold text-[#715c62]">{col.title}</h2>
+                </div>
+                <p className="whitespace-pre-line text-[14.5px] text-gray-600 ml-0 md:ml-[60px]">
+                  {col.text}
                 </p>
+                {idx !== aboutCols.length - 1 && (
+                  <div className="h-px w-full bg-gray-100 mt-10 ml-0 md:ml-[60px]"></div>
+                )}
               </div>
-
-              {/* Timeless Appeal */}
-              <div>
-                <h3 className="font-bold text-[#f1592a] text-[15px] mb-3 font-sans">Timeless Appeal</h3>
-                <p className="text-[#222]">
-                  At Anagha, jewellery is not a product but a manifestation of artistry and our exquisite range of jewel pieces strike the perfect balance between traditional charm and contemporary appeal. With designs that capture the beauty and celebration of special occasions in the life of the Indian woman, Anagha aims to be an integral part of her journey. As India's leading wedding jeweller, we understand the varied needs of every regional bride and that has stood as our inspiration behind creating special wedding collections catering to every community across India.
-                </p>
-              </div>
-
-              {/* Epitomizing Excellence */}
-              <div>
-                <h3 className="font-bold text-[#f1592a] text-[15px] mb-3 font-sans">Epitomizing Excellence</h3>
-                <p className="text-[#222]">
-                  At Anagha, we strive to deliver excellence, consistently. We've brought to the market a whole new standard of business ethics and product reliability, in the process bringing about a transformation in which jewellery is bought or sold in India. With innovations like the Karatmeter to check the purity of gold, the brand has won over the customer's hearts. Our constant endeavour is to maintain the highest standard and quality of our gold, diamonds and precious stones used in our jewel pieces. We implement extensive quality checks and only source our diamonds ethically from known, trusted and certified suppliers. At Anagha, we also take great pride in offering an unparalleled retail experience that takes into consideration our customer's unique needs and preferences.
-                </p>
-              </div>
-
-              {/* Success Secrets */}
-              <div>
-                <h3 className="font-bold text-[#f1592a] text-[15px] mb-3 font-sans">Success Secrets</h3>
-                <p className="text-[#222]">
-                  Our understanding of the ethos of the current Indian jewellery market and our constant evolution along with its changing demands and preferences is why Anagha enjoys the distinct honour of being coveted by Indian women. Furthermore, our adherence to stringent standards in terms of quality and strict and uniform guidelines across all 500+ stores have helped in establishing ourselves further as the most trusted jewellery brand in the country.
-                </p>
-              </div>
-
-            </div>
+            ))}
           </div>
 
         </div>

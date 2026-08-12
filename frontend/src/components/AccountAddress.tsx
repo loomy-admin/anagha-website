@@ -160,7 +160,11 @@ export default function AccountAddress() {
 
     startTransition(async () => {
       try {
-        const updated = await updateMe({ shippingAddress: updatedAddresses });
+        const payload: any = { shippingAddress: updatedAddresses };
+        if (!customer?.mobile || customer.mobile.trim() === '') {
+          payload.mobile = mobile;
+        }
+        const updated = await updateMe(payload);
         setCustomer(updated);
         setAddresses(updatedAddresses);
         setSuccess(formMode === 'edit' ? 'Shipping address updated successfully.' : 'Shipping address added successfully.');
