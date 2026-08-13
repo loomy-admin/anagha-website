@@ -243,6 +243,80 @@ function SectionVisibility() {
   );
 }
 
+/* ─── Brand Assets Panel ────────────────────────────────────── */
+function BrandAssets() {
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [iconPreview, setIconPreview] = useState<string | null>(null);
+  const [msg, setMsg] = useState('');
+  const logoRef = useRef<HTMLInputElement>(null);
+  const iconRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch('/api/site/header').then(r => r.json()).then(d => {
+      setLogoPreview(d.logoUrl || '/images/brand_logo.png');
+      setIconPreview(d.logoIconUrl || '/images/logo_icon.png');
+    }).catch(console.error);
+  }, []);
+
+  const uploadAsset = async (file: File, type: 'logo' | 'logo-icon') => {
+    setMsg('Uploading...');
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res = await fetch(`/api/upload/header?action=upload-${type}`, { method: 'POST', body: fd });
+      const d = await res.json();
+      if (d.success) {
+        if (type === 'logo') setLogoPreview(d.image);
+        else setIconPreview(d.image);
+        setMsg('Uploaded!');
+      } else {
+        setMsg('Upload failed');
+      }
+    } catch {
+      setMsg('Upload error');
+    }
+    setTimeout(() => setMsg(''), 3000);
+  };
+
+  return (
+    <section className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+      <div className="flex items-end justify-between border-b border-gray-100 pb-4 mb-6">
+        <h2 className="text-xl font-display font-bold text-navy uppercase tracking-widest">Brand Assets (Logo)</h2>
+        {msg && <span className="text-xs text-coral font-bold">{msg}</span>}
+      </div>
+      <div className="flex flex-wrap gap-8">
+        <div className="flex flex-col gap-3">
+          <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Main Logo</label>
+          <div 
+            onClick={() => logoRef.current?.click()}
+            className="w-[200px] h-[80px] border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center cursor-pointer hover:border-coral transition-all bg-gray-50 relative group"
+          >
+            <input ref={logoRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadAsset(f, 'logo'); }} />
+            {logoPreview ? <img src={logoPreview} className="max-w-[80%] max-h-[80%] object-contain" /> : null}
+            <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center rounded-lg">
+              <span className="text-[10px] font-bold text-navy bg-white/90 px-2 py-1 rounded">CHANGE</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Logo Icon (Small)</label>
+          <div 
+            onClick={() => iconRef.current?.click()}
+            className="w-[80px] h-[80px] border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center cursor-pointer hover:border-coral transition-all bg-gray-50 relative group"
+          >
+            <input ref={iconRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadAsset(f, 'logo-icon'); }} />
+            {iconPreview ? <img src={iconPreview} className="max-w-[80%] max-h-[80%] object-contain" /> : null}
+            <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center rounded-lg">
+              <span className="text-[10px] font-bold text-navy bg-white/90 px-2 py-1 rounded">CHANGE</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ─── Main upload page ─────────────────────────────────────── */
 export default function UploadPage() {
   const [heroFile, setHeroFile] = useState<File | null>(null);
@@ -298,6 +372,8 @@ export default function UploadPage() {
       <Header />
 
       <div className="max-w-[1600px] mx-auto px-8 py-12 space-y-20">
+
+        <BrandAssets />
 
         <SectionVisibility />
 
@@ -1278,7 +1354,7 @@ function AboutEditor() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch('http://127.0.0.1:4001/api/site/landing/content')
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4001'}/api/site/landing/content`)
       .then(r => r.json())
       .then(d => {
         if (d.about && d.about.length === 3) setCols(d.about);
@@ -1342,7 +1418,7 @@ function PromiseEditor() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch('http://127.0.0.1:4001/api/site/landing/content')
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4001'}/api/site/landing/content`)
       .then(r => r.json())
       .then(d => {
         if (d.promise && d.promise.length === 6) setLabels(d.promise);

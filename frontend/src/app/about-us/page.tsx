@@ -13,7 +13,8 @@ const DEFAULT_ABOUT = [
 ];
 
 export default async function AboutUsPage() {
-  const meta: { about?: { title: string; text: string }[] } = await fetch('http://localhost:4001/api/site/landing/content', { next: { revalidate: 0 } }).then(res => res.json()).catch(() => ({}));
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL || 'http://localhost:4001';
+  const meta: { about?: { title: string; text: string }[] } = await fetch(`${API_URL}/api/site/landing/content`, { next: { revalidate: 0 } }).then(res => res.json()).catch(() => ({}));
   const aboutCols = meta.about && meta.about.length === 3 ? meta.about : DEFAULT_ABOUT;
 
   return (

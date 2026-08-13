@@ -296,7 +296,7 @@ export default function CheckoutForm() {
               </div>
               <div className="flex justify-between">
                 <span>Shipping</span>
-                <span className="font-medium text-[#00a699]">Complimentary</span>
+                <span className="font-medium text-[#00a699]">Free</span>
               </div>
               <div className="flex justify-between">
                 <span>Taxes</span>
@@ -334,7 +334,7 @@ export default function CheckoutForm() {
                 </div>
                 <div>
                   <p className="text-[12px] font-bold text-[#032C5E] uppercase tracking-wide">Insured Shipping</p>
-                  <p className="text-[11px] text-gray-500 mt-0.5">Complimentary fast delivery</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">Free fast delivery</p>
                 </div>
               </div>
             </div>

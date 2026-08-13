@@ -5,15 +5,22 @@ import { applyWebsiteDescription, getAllWebsiteItemMeta } from './websiteItemMet
 import { getErpVisibility } from './erpVisibility.js';
 import { sql, inArray } from 'drizzle-orm';
 
-export async function syncCatalogToDb() {
-  console.log('[syncCatalog] Starting background catalog sync...');
+let isSyncing = false;
+
+export async function syncCatalogToDb(isFullReconciliation: boolean = false) {
+  if (isSyncing) {
+    console.log('[syncCatalog] Sync already in progress, aborting this run.');
+    return;
+  }
+  isSyncing = true;
+  console.log(`[syncCatalog] Starting background catalog sync (Full Reconciliation: ${isFullReconciliation})...`);
   try {
     const visibility = await getErpVisibility();
     const metaMap = await getAllWebsiteItemMeta();
 
     const seenTags = new Set<string>();
     let offset = 0;
-    const limit = 1000;
+    const limit = 200;
     let total = 1; // dummy initial value to enter loop
     let insertedOrUpdated = 0;
 
@@ -22,11 +29,11 @@ export async function syncCatalogToDb() {
     while (offset < total) {
       await delay(200);
       const res = await fetchErpPublic('/catalog', { offset: String(offset), limit: String(limit) });
-      
+
       if (!res?.data?.items || res.data.items.length === 0) {
         break;
       }
-      
+
       total = res.data.total;
 
       const visibleItems = res.data.items.filter((item: any) => {
@@ -34,7 +41,7 @@ export async function syncCatalogToDb() {
         const tag = String(item.tag_number || '');
         const hasCat = visibility.visibleCategories.length > 0;
         const hasProd = visibility.visibleProducts.length > 0;
-        
+
         if (hasCat || hasProd) {
           const catVisible = visibility.visibleCategories.includes(groupSlug);
           const prodVisible = visibility.visibleProducts.includes(tag);
@@ -85,15 +92,16 @@ export async function syncCatalogToDb() {
           });
         insertedOrUpdated += rows.length;
       }
-      
-      offset += limit;
+
+      offset += res.data.items.length;
     }
 
     // Cleanup: Delete items from DB that are no longer visible or deleted in ERP
-    if (seenTags.size > 0) {
+    // ONLY do this during a full reconciliation to avoid wiping DB if ERP glitch happens midway
+    if (isFullReconciliation && seenTags.size > 0 && offset >= total) {
       const existingItems = await db.select({ tagNumber: cachedCatalogItems.tagNumber }).from(cachedCatalogItems);
       const tagsToDelete = existingItems.filter(item => !seenTags.has(item.tagNumber)).map(item => item.tagNumber);
-      
+
       if (tagsToDelete.length > 0) {
         // Chunk deletions to avoid param limits
         const deleteChunkSize = 1000;
@@ -108,5 +116,7 @@ export async function syncCatalogToDb() {
     console.log(`[syncCatalog] Sync complete. Processed ${insertedOrUpdated} visible items in batches.`);
   } catch (error) {
     console.error('[syncCatalog] Sync failed:', error);
+  } finally {
+    isSyncing = false;
   }
 }

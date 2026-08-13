@@ -60,6 +60,15 @@ export function formatDisplayPrice(price: number | null | undefined) {
   return `₹${Number(price).toLocaleString('en-IN')}`;
 }
 
+export function getPrimaryImage(item: Partial<CatalogItem>): string | null {
+  if (item.pos_image_url) return item.pos_image_url;
+  if (item.image_url) return item.image_url;
+  if (Array.isArray(item.website_images) && item.website_images.length > 0) {
+    return item.website_images[0];
+  }
+  return null;
+}
+
 export function itemHref(item: CatalogItem) {
   // Routes are group-based (ERP inventory_groups), not type (MEN/WOMEN).
   const groupSlug = item.group_slug || item.type_slug || 'item';
@@ -107,9 +116,14 @@ export function groupImageForSlug(
   return GROUP_IMAGE_BY_SLUG[key] || '/images/category/silver_image.png';
 }
 
+function getBaseUrl() {
+  if (typeof window !== 'undefined') return '';
+  return process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+}
+
 /** Admin / storefront overrides for ERP group tile images. */
 export async function fetchGroupImages() {
-  const res = await fetch('/api/site/group-images', { cache: 'no-store' });
+  const res = await fetch(`${getBaseUrl()}/api/site/group-images`, { cache: 'no-store' });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(body.error || 'Failed to load group images');
@@ -354,7 +368,7 @@ function getLocalCatalogFilters(params: Record<string, string | undefined> = {})
 
 export async function fetchCatalog(params: Record<string, string | number | undefined> = {}) {
   try {
-    const res = await fetch(`/api/catalog${toQuery(params)}`, { cache: 'no-store' });
+    const res = await fetch(`${getBaseUrl()}/api/catalog${toQuery(params)}`, { cache: 'no-store' });
     if (res.ok) {
       const body = await res.json().catch(() => ({}));
       if (body?.data?.items) {
@@ -375,7 +389,7 @@ export async function fetchCatalog(params: Record<string, string | number | unde
 
 export async function fetchCatalogFilters(params: Record<string, string | undefined> = {}) {
   try {
-    const res = await fetch(`/api/catalog/filters${toQuery(params)}`, { cache: 'no-store' });
+    const res = await fetch(`${getBaseUrl()}/api/catalog/filters${toQuery(params)}`, { cache: 'no-store' });
     if (res.ok) {
       const body = await res.json().catch(() => ({}));
       if (body?.data?.filters) {
@@ -390,7 +404,7 @@ export async function fetchCatalogFilters(params: Record<string, string | undefi
 
 export async function fetchCatalogItem(tag: string) {
   try {
-    const res = await fetch(`/api/catalog/items/${encodeURIComponent(tag)}`, { cache: 'no-store' });
+    const res = await fetch(`${getBaseUrl()}/api/catalog/items/${encodeURIComponent(tag)}`, { cache: 'no-store' });
     if (res.ok) {
       const body = await res.json().catch(() => ({}));
       if (body?.data) {
@@ -562,7 +576,7 @@ export async function fetchSearchSuggestions(query: string): Promise<SearchSugge
 
   try {
     const res = await fetch(
-      `/api/catalog/suggestions?q=${encodeURIComponent(q)}`,
+      `${getBaseUrl()}/api/catalog/suggestions?q=${encodeURIComponent(q)}`,
       { cache: 'no-store' },
     );
     if (res.ok) {

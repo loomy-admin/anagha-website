@@ -4,6 +4,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import cron from 'node-cron';
 
 import heroRoutes from './routes/hero.js';
 import headerRoutes, { getHeaderSelection } from './routes/header.js';
@@ -115,7 +116,7 @@ app.post('/api/admin/sync-catalog', async (req, res) => {
   if (req.headers.authorization !== `Bearer ${process.env.ADMIN_TOKEN}`) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  syncCatalogToDb().catch(console.error);
+  syncCatalogToDb(true).catch(console.error); // Manual sync acts as full reconciliation
   res.json({ success: true, message: 'Sync started in background' });
 });
 
@@ -135,11 +136,30 @@ app.listen(PORT, () => {
   console.log(`Anagha API listening on http://localhost:${PORT}`);
   console.log(`Uploads directory: ${path.resolve(__dirname, '..', 'uploads')}`);
 
-  // Run catalog sync every 15 minutes
-  setInterval(() => {
-    syncCatalogToDb().catch(console.error);
-  }, 15 * 60 * 1000);
-  
-  // Start one immediately on boot
-  syncCatalogToDb().catch(console.error);
+  // Schedule Incremental Sync (Every hour on the hour)
+  cron.schedule(
+    '0 * * * *',
+    () => {
+      console.log('[cron] Triggering hourly incremental sync');
+      syncCatalogToDb(false).catch(console.error);
+    },
+    {
+      timezone: 'Asia/Kolkata',
+    },
+  );
+
+  // Schedule Full Reconciliation (Every day at 2:00 AM)
+  cron.schedule(
+    '0 2 * * *',
+    () => {
+      console.log('[cron] Triggering daily full reconciliation sync');
+      syncCatalogToDb(true).catch(console.error);
+    },
+    {
+      timezone: 'Asia/Kolkata',
+    },
+  );
+
+  // Start an initial incremental sync immediately on boot
+  syncCatalogToDb(false).catch(console.error);
 });

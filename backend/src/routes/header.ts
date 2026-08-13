@@ -31,6 +31,8 @@ export type HeaderSelectedGroup = {
 
 type HeaderContent = {
   selectedGroups: HeaderSelectedGroup[];
+  logoUrl?: string;
+  logoIconUrl?: string;
 };
 
 function emptyDropdown(): HeaderSelectedGroup['dropdown'] {
@@ -129,7 +131,11 @@ export async function getHeaderSelection(): Promise<HeaderContent> {
     out = collectGroups(header.navItems);
   }
 
-  return { selectedGroups: out };
+  return { 
+    selectedGroups: out,
+    logoUrl: header.logoUrl,
+    logoIconUrl: header.logoIconUrl
+  };
 }
 
 router.get('/', async (_req, res) => {
@@ -140,7 +146,8 @@ router.get('/', async (_req, res) => {
 router.post(
   '/',
   (req, res, next) => {
-    if (String(req.query.action || '') === 'upload-callout-image') {
+    const action = String(req.query.action || '');
+    if (action === 'upload-callout-image' || action === 'upload-logo' || action === 'upload-logo-icon') {
       return upload.single('file')(req, res, next);
     }
     return next();
@@ -161,6 +168,22 @@ router.post(
       return res.json({ success: true, image: publicUploadPath(filename) });
     }
 
+    if (action === 'upload-logo' || action === 'upload-logo-icon') {
+      if (!req.file) return res.status(400).json({ error: 'No file' });
+      const ext = path.extname(req.file.originalname) || `.${req.file.mimetype.split('/')[1] || 'png'}`;
+      const prefix = action === 'upload-logo' ? 'brand_logo' : 'logo_icon';
+      const filename = `${prefix}_${Date.now()}${ext}`;
+      fs.renameSync(req.file.path, path.join(UPLOADS_DIR, filename));
+      const url = publicUploadPath(filename);
+      
+      const current = await getContent<HeaderContent>('header', { selectedGroups: [] });
+      if (action === 'upload-logo') current.logoUrl = url;
+      else current.logoIconUrl = url;
+      await setContent('header', current);
+      
+      return res.json({ success: true, image: url });
+    }
+
     const raw = Array.isArray(req.body?.selectedGroups)
       ? req.body.selectedGroups
       : typeof req.body?.selectedGroups === 'string'
@@ -174,7 +197,8 @@ router.post(
     }
 
     const selectedGroups = collectGroups(raw);
-    await setContent('header', { selectedGroups });
+    const current = await getContent<HeaderContent>('header', { selectedGroups: [] });
+    await setContent('header', { ...current, selectedGroups });
     res.json({ success: true, selectedGroups });
   } catch (err) {
     console.error('[header] POST', err);
@@ -185,7 +209,8 @@ router.post(
 
 router.delete('/', async (_req, res) => {
   try {
-    await setContent('header', { selectedGroups: [] });
+    const current = await getContent<HeaderContent>('header', { selectedGroups: [] });
+    await setContent('header', { ...current, selectedGroups: [] });
     res.json({ success: true, selectedGroups: [] });
   } catch {
     res.status(500).json({ error: 'Reset failed' });

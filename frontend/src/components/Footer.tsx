@@ -108,7 +108,6 @@ export default function Footer() {
           {/* Copyright */}
           <div className="text-right">
             <p className="text-[12px] text-gray-400">© 2026 Anagha. All Rights Reserved.</p>
-            <p className="text-[11px] text-gray-500 mt-1">CIN: L72900KA2011PLC059678</p>
           </div>
 
         </div>

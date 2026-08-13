@@ -263,18 +263,18 @@ function FiltersBody({
                 onClick={() => setActive((prev) => ({ ...prev, hasImage: !prev.hasImage, articles: [] }))}
               >
                 <div
-                  className={`w-[18px] h-[18px] flex-shrink-0 rounded-[4px] border-[1.5px] flex items-center justify-center transition-all duration-200 ${
+                  className={`w-4 h-4 border rounded-[2px] flex-shrink-0 transition-colors flex items-center justify-center ${
                     active.hasImage
-                      ? 'border-[#032C5E] bg-[#032C5E] text-white shadow-sm'
-                      : 'border-gray-300 bg-white text-transparent group-hover:border-gray-400'
+                      ? 'border-[#032C5E] text-[#032C5E]'
+                      : 'border-gray-300 bg-white text-transparent group-hover:border-[#032C5E]'
                   }`}
                 >
                   <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12"></polyline>
                   </svg>
                 </div>
-                <span className={`text-[13px] ${active.hasImage ? 'text-[#032C5E] font-medium' : 'text-[#444]'}`}>
-                  Only items with images
+                <span className={`text-[13px] uppercase ${active.hasImage ? 'text-[#032C5E] font-medium' : 'text-[#444]'}`}>
+                  PRODUCTS WITH IMAGES
                 </span>
               </button>
             </div>

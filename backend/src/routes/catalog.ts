@@ -355,7 +355,7 @@ router.get('/suggestions', async (req: Request, res: Response) => {
             return {
               tag_number: String(item.tag_number || ''),
               name: String(item.name || ''),
-              image_url: item.image_url || item.pos_image_url || null,
+              image_url: item.pos_image_url || item.image_url || (Array.isArray(item.website_images) && item.website_images.length > 0 ? item.website_images[0] : null),
               display_price: item.display_price != null ? Number(item.display_price) : null,
               group_slug: item.group_slug || null,
             };
@@ -370,7 +370,7 @@ router.get('/suggestions', async (req: Request, res: Response) => {
             defaultProducts = items.slice(0, 3).map((item: any) => ({
               tag_number: String(item.tag_number || ''),
               name: String(item.name || ''),
-              image_url: item.image_url || item.pos_image_url || null,
+              image_url: item.pos_image_url || item.image_url || (Array.isArray(item.website_images) && item.website_images.length > 0 ? item.website_images[0] : null),
               display_price: item.display_price != null ? Number(item.display_price) : null,
               group_slug: item.group_slug || null,
             }));
@@ -473,7 +473,7 @@ router.get('/suggestions', async (req: Request, res: Response) => {
           (item: Record<string, unknown>) => ({
             tag_number: String(item.tag_number || ''),
             name: String(item.name || ''),
-            image_url: item.image_url || item.pos_image_url || null,
+            image_url: item.pos_image_url || item.image_url || (Array.isArray(item.website_images) && item.website_images.length > 0 ? item.website_images[0] : null),
             display_price: item.display_price != null ? Number(item.display_price) : null,
             group_slug: item.group_slug || null,
           }),

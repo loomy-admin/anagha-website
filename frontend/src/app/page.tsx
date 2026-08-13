@@ -13,7 +13,8 @@ import PromiseSection from '@/components/Promise';
 import Footer from '@/components/Footer';
 async function getMeta() {
   try {
-    const res = await fetch('http://127.0.0.1:4001/api/site/landing/content', {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL || 'http://127.0.0.1:4001';
+    const res = await fetch(`${API_URL}/api/site/landing/content`, {
       next: { revalidate: 0 },
     });
     if (!res.ok) throw new Error('Failed to fetch landing content');

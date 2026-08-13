@@ -198,3 +198,70 @@ export async function sendOrderInvoice(session: any, items: any[]) {
     console.error('[mailer] Failed to send invoice email:', err);
   }
 }
+
+export async function sendSupportQueryEmail(payload: { name: string; email: string; phone: string; query: string }, targetEmail: string) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.warn('[mailer] SMTP credentials missing, skipping support email');
+    return;
+  }
+
+  const date = new Date().toLocaleString('en-IN');
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://anaghajewellers.com';
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
+      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-top: 4px solid #f1592a; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        
+        <div style="text-align: center; margin-bottom: 20px;">
+          <img src="${apiUrl}/images/logo.png" alt="Anagha Jewellers Logo" style="max-height: 50px;" />
+        </div>
+
+        <h2 style="color: #032C5E; border-bottom: 1px solid #eee; padding-bottom: 10px;">New Contact Form Query</h2>
+        
+        <p style="color: #555; font-size: 14px; margin-bottom: 20px;">
+          You have received a new query from the website contact form on <strong>${date}</strong>.
+        </p>
+
+        <table width="100%" cellpadding="10" cellspacing="0" style="background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+          <tr>
+            <td width="120" style="font-weight: bold; color: #333; border-bottom: 1px solid #ddd;">Name:</td>
+            <td style="border-bottom: 1px solid #ddd; color: #222;">${payload.name || 'N/A'}</td>
+          </tr>
+          <tr>
+            <td style="font-weight: bold; color: #333; border-bottom: 1px solid #ddd;">Email:</td>
+            <td style="border-bottom: 1px solid #ddd;">
+              <a href="mailto:${payload.email}" style="color: #f1592a;">${payload.email || 'N/A'}</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="font-weight: bold; color: #333; border-bottom: 1px solid #ddd;">Phone:</td>
+            <td style="border-bottom: 1px solid #ddd; color: #222;">${payload.phone || 'N/A'}</td>
+          </tr>
+          <tr>
+            <td style="font-weight: bold; color: #333; vertical-align: top;">Query:</td>
+            <td style="color: #222; white-space: pre-wrap;">${payload.query || 'No query provided.'}</td>
+          </tr>
+        </table>
+        
+        <div style="margin-top: 30px; font-size: 12px; color: #888; text-align: center;">
+          This is an automated notification from Anagha Jewellers Website.
+        </div>
+      </div>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: process.env.MAIL_FROM || '"Anagha Jewellers" <invoices@anaghajewellers.com>',
+      to: targetEmail,
+      replyTo: payload.email,
+      subject: `New Contact Form Query from ${payload.name || 'Customer'}`,
+      html,
+    });
+    console.log('[mailer] Successfully sent contact query to', targetEmail);
+  } catch (err) {
+    console.error('[mailer] Failed to send contact query email:', err);
+    throw err;
+  }
+}
+

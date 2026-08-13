@@ -10,6 +10,7 @@ export default function AdminContactInfo() {
   const [phone, setPhone] = useState('');
   const [corporateEmail, setCorporateEmail] = useState('');
   const [salesEmail, setSalesEmail] = useState('');
+  const [supportEmail, setSupportEmail] = useState('');
   const [instagram, setInstagram] = useState('');
   const [youtube, setYoutube] = useState('');
   const [addresses, setAddresses] = useState<string[]>([]);
@@ -26,6 +27,7 @@ export default function AdminContactInfo() {
         setPhone(data.phone || '');
         setCorporateEmail(data.corporateEmail || '');
         setSalesEmail(data.salesEmail || '');
+        setSupportEmail(data.supportEmail || '');
         setInstagram(data.instagram || '');
         setYoutube(data.youtube || '');
         setAddresses(data.addresses || []);
@@ -42,7 +44,7 @@ export default function AdminContactInfo() {
       const res = await fetch('/api/upload/contact', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ whatsapp, email, phone, corporateEmail, salesEmail, instagram, youtube, addresses }),
+        body: JSON.stringify({ whatsapp, email, phone, corporateEmail, salesEmail, supportEmail, instagram, youtube, addresses }),
       });
       if (res.ok) {
         setMessage('Contact info saved successfully!');
@@ -83,7 +85,7 @@ export default function AdminContactInfo() {
           ) : (
             <form onSubmit={handleSave} className="space-y-6">
               <div>
-                <label className="block text-sm font-bold text-navy mb-2">Support Email</label>
+                <label className="block text-sm font-bold text-navy mb-2">Primary Contact Email</label>
                 <input
                   type="email"
                   required
@@ -91,6 +93,19 @@ export default function AdminContactInfo() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-rose-500"
                   placeholder="e.g. an@anagha.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-navy mb-2">Contact Form Submissions Email</label>
+                <p className="text-xs text-gray-500 mb-2">This is the email address that receives queries from the Contact Us page.</p>
+                <input
+                  type="email"
+                  required
+                  value={supportEmail}
+                  onChange={(e) => setSupportEmail(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  placeholder="e.g. support@anagha.com"
                 />
               </div>
 

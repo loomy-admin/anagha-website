@@ -22,10 +22,30 @@ export default function ContactUs() {
   const { whatsapp, email, phone, corporateEmail, salesEmail, addresses } = useContactInfo();
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', query: '' });
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      const res = await fetch('/api/site/contact/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      if (res.ok) {
+        setSubmitted(true);
+      } else {
+        setErrorMsg('Something went wrong. Please try again.');
+      }
+    } catch (error) {
+      console.error('Submission error:', error);
+      setErrorMsg('Failed to connect to the server.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -195,19 +215,25 @@ export default function ContactUs() {
                   <div className="flex items-start gap-6">
                     <label className="w-[80px] shrink-0 pt-2 text-[#4a4a4a] font-medium">Query</label>
                     <textarea
+                      required
                       placeholder="Enter query"
                       rows={4}
                       value={formData.query}
-                      onChange={e => setFormData(f => ({ ...f, query: e.target.value }))}
+                      onChange={(e) => setFormData({ ...formData, query: e.target.value })}
                       className="flex-1 border-0 border-b border-gray-200 outline-none py-2 text-[14px] text-[#222] placeholder-gray-300 focus:border-[#f1592a] transition-colors resize-none bg-transparent"
-                    />
+                    ></textarea>
                   </div>
+
+                  {errorMsg && (
+                    <div className="text-red-500 text-sm font-semibold">{errorMsg}</div>
+                  )}
 
                   <button
                     type="submit"
-                    className="w-full bg-[#f1592a] text-white py-4 font-bold text-[13px] tracking-widest uppercase hover:bg-[#d04a20] transition-colors rounded-sm"
+                    disabled={loading}
+                    className="w-full bg-[#f1592a] text-white py-4 font-bold text-[13px] tracking-widest uppercase hover:bg-[#d04a20] transition-colors rounded-sm disabled:opacity-50"
                   >
-                    Submit
+                    {loading ? 'Sending...' : 'Submit'}
                   </button>
 
                   {/* WhatsApp Banner — below submit */}

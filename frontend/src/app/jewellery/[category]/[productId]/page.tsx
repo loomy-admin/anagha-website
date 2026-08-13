@@ -46,11 +46,15 @@ export default async function ProductDetailPage({
   }
 
   const groupSlug = product.group_slug || category;
-  const gallery: string[] = Array.isArray(product.website_images) && product.website_images.length
-    ? product.website_images
-    : product.image_url
-      ? [product.image_url]
-      : [];
+  
+  const gallery: string[] = [];
+  if (product.pos_image_url) gallery.push(product.pos_image_url);
+  if (product.image_url && product.image_url !== product.pos_image_url) gallery.push(product.image_url);
+  if (Array.isArray(product.website_images)) {
+    product.website_images.forEach((img: string) => {
+      if (!gallery.includes(img)) gallery.push(img);
+    });
+  }
 
   return (
     <main className="w-full bg-white min-h-screen font-sans pb-20">
@@ -76,7 +80,7 @@ export default async function ProductDetailPage({
             name={product.name}
             tagNumber={product.tag_number}
             displayPrice={product.display_price}
-            imageUrl={product.image_url}
+            imageUrl={gallery[0] || null}
             groupSlug={groupSlug}
             netWeight={product.net_weight}
             grossWeight={product.gross_weight}
