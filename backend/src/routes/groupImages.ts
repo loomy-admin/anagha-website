@@ -1,8 +1,7 @@
 import { Router } from 'express';
-import path from 'node:path';
-import fs from 'node:fs';
 import { getContent, setContent } from '../lib/content.js';
-import { upload, UPLOADS_DIR, safeUnlink, publicUploadPath } from '../lib/upload.js';
+import { upload, safeUnlink } from '../lib/upload.js';
+import { storeCmsUpload } from '../lib/objectStorage.js';
 
 const router = Router();
 
@@ -54,10 +53,8 @@ router.post('/', upload.single('file'), async (req, res) => {
     const prev = current.images[slug];
     if (prev) safeUnlink(prev);
 
-    const ext = path.extname(req.file.originalname) || `.${req.file.mimetype.split('/')[1] || 'png'}`;
-    const filename = `group_tile_${slug}_${Date.now()}${ext}`;
-    fs.renameSync(req.file.path, path.join(UPLOADS_DIR, filename));
-    const image = publicUploadPath(filename);
+    const stored = await storeCmsUpload(req.file, `group_tile_${slug}_${Date.now()}`);
+    const image = stored.url;
 
     current.images[slug] = image;
     await setContent(CONTENT_KEY, current);

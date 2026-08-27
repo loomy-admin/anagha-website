@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
 import { checkoutSessions } from '../db/schema.js';
@@ -226,6 +226,7 @@ async function finalizePaidSession(sessionId: string, paymentRef: string) {
     bill: {
       id: session.id,
       bill_number: session.erpBillNumber || `AJ-${String(session.id).slice(0, 8).toUpperCase()}`,
+      items: [] as unknown[],
     },
   };
 
@@ -319,14 +320,13 @@ router.post('/session', requireCustomer, async (req: Request, res: Response) => 
     const line = lines[0];
     const expiresAt = reserved.expires_at ? new Date(reserved.expires_at) : null;
     const tagKey = uniqueTags.join('|');
-    const addressJson = JSON.stringify(selectedAddress);
 
     try {
       await db.insert(checkoutSessions).values({
         id: sessionId,
         status: 'pending',
         tagNumber: tagKey,
-        inventoryId: line?.inventory_id || null,
+        inventoryId: line?.inventory_id ? String(line.inventory_id) : null,
         amount: String(amount),
         itemsAmount: String(itemsAmount),
         shippingAmount: String(shippingAmount),
@@ -338,7 +338,7 @@ router.post('/session', requireCustomer, async (req: Request, res: Response) => 
         customerName: name,
         customerMobile: mobile,
         customerEmail: email || null,
-        shippingAddress: sql`${addressJson}::jsonb`,
+        shippingAddress: selectedAddress,
         paymentPayload: {
           cart_tags: uniqueTags,
           items: lines,

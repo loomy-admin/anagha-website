@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { TESTIMONIAL_REVIEWS } from '@/lib/data';
+import { cmsSrc } from '@/lib/cmsAsset';
 
 interface Props {
   live?: {
@@ -26,7 +27,7 @@ export default function Testimonials({ live }: Props) {
     return {
       name: liveNames[i] || d?.name || '',
       text: liveTexts[i] || d?.text || '',
-      img:  liveImages[i] ? `/uploads/${liveImages[i]}` : (d?.img || ''),
+      img:  liveImages[i] ? cmsSrc(liveImages[i]) : (d?.img || ''),
       rotate: d?.rotate || (i % 2 === 0 ? 'rotate-2' : '-rotate-2'),
       translateY: d?.translateY || 'translate-y-0',
     };

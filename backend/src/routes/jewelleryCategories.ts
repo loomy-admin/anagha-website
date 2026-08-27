@@ -1,11 +1,10 @@
 import { Router } from 'express';
-import path from 'node:path';
-import fs from 'node:fs';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { jewelleryCategories, products } from '../db/schema.js';
 import { DEFAULT_JEWELLERY_CATEGORIES } from '../lib/defaults.js';
-import { upload, UPLOADS_DIR, safeUnlink, publicUploadPath } from '../lib/upload.js';
+import { upload, safeUnlink } from '../lib/upload.js';
+import { storeCmsUpload } from '../lib/objectStorage.js';
 
 const router = Router();
 
@@ -80,11 +79,9 @@ router.post('/', upload.single('file'), async (req, res) => {
       }
 
       if (req.file) {
-        if (row.image?.startsWith('/uploads/')) safeUnlink(row.image);
-        const ext = path.extname(req.file.originalname) || '.png';
-        const filename = `jewel_cat_${idx}_${Date.now()}${ext}`;
-        fs.renameSync(req.file.path, path.join(UPLOADS_DIR, filename));
-        updates.image = publicUploadPath(filename);
+        if (row.image) safeUnlink(row.image);
+        const stored = await storeCmsUpload(req.file, `jewel_cat_${idx}_${Date.now()}`);
+        updates.image = stored.url;
       }
 
       await db
@@ -119,7 +116,7 @@ router.delete('/', async (req, res) => {
       .where(eq(jewelleryCategories.name, name));
 
     for (const row of rows) {
-      if (row.image?.startsWith('/uploads/')) safeUnlink(row.image);
+      if (row.image) safeUnlink(row.image);
       await db.delete(jewelleryCategories).where(eq(jewelleryCategories.id, row.id));
     }
 

@@ -78,7 +78,7 @@ function splitList(value?: string) {
 }
 
 function matchSlugOrName(
-  slugCol: typeof cachedCatalogItems.groupSlug,
+  slugCol: typeof cachedCatalogItems.groupSlug | typeof cachedCatalogItems.typeSlug | typeof cachedCatalogItems.articleSlug,
   raw: string,
   nameExpr: ReturnType<typeof sql>,
 ) {
@@ -180,9 +180,9 @@ function handleErpError(err: unknown, res: Response) {
 let cachedFilters: {
   data: {
     filters: {
-      group?: Array<{ name: string; slug?: string }>;
-      article?: Array<{ name: string; slug?: string; id?: string }>;
-      type?: Array<{ name: string; slug?: string }>;
+      group?: Array<{ name: string; slug?: string | null; count?: number }>;
+      article?: Array<{ name: string; slug?: string | null; id?: string; count?: number }>;
+      type?: Array<{ name: string; slug?: string | null; count?: number }>;
     };
   };
   at: number;
@@ -215,8 +215,12 @@ const TAXONOMY_ALIASES: Record<string, string[]> = {
 };
 
 async function queryFilters(scope: CatalogScope) {
-  const slugOk = (col: typeof cachedCatalogItems.groupSlug) =>
-    sql`${col} is not null and ${col} <> ''`;
+  const slugOk = (
+    col:
+      | typeof cachedCatalogItems.groupSlug
+      | typeof cachedCatalogItems.typeSlug
+      | typeof cachedCatalogItems.articleSlug,
+  ) => sql`${col} is not null and ${col} <> ''`;
 
   const [groupWhere, typeWhere, articleWhere, purityWhere, metalWhere] = await Promise.all([
     buildCatalogConditions(scope, 'group'),
@@ -282,11 +286,11 @@ async function queryFilters(scope: CatalogScope) {
   ]);
 
   return {
-    group: groups.map((g) => ({ slug: g.slug, name: g.name || g.slug, count: Number(g.count || 0) })),
-    type: types.map((g) => ({ slug: g.slug, name: g.name || g.slug, count: Number(g.count || 0) })),
+    group: groups.map((g) => ({ slug: g.slug, name: String(g.name || g.slug || ''), count: Number(g.count || 0) })),
+    type: types.map((g) => ({ slug: g.slug, name: String(g.name || g.slug || ''), count: Number(g.count || 0) })),
     article: articles.map((g) => ({
       slug: g.slug,
-      name: g.name || g.slug,
+      name: String(g.name || g.slug || ''),
       id: g.id || undefined,
       count: Number(g.count || 0),
     })),
@@ -300,8 +304,9 @@ async function getCachedFilters() {
     return cachedFilters.data;
   }
   const filters = await queryFilters({ adminBypass: false });
-  cachedFilters = { data: { filters }, at: Date.now() };
-  return cachedFilters.data;
+  const data = { filters };
+  cachedFilters = { data, at: Date.now() };
+  return data;
 }
 
 function normalizeStem(word: string): string {

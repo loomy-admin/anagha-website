@@ -110,3 +110,15 @@ export async function putPublicObject(relPath: string, buffer: Buffer, contentTy
   fs.writeFileSync(full, buffer);
   return publicUploadPath(rel);
 }
+
+export async function storeCmsUpload(file: Express.Multer.File, objectName: string) {
+  const origExt = path.extname(file.originalname || '') || path.extname(objectName) || '.bin';
+  const ext = origExt.startsWith('.') ? origExt : `.${origExt}`;
+  const filename = `${objectName.replace(/\.[^/.]+$/, '')}${ext}`.replace(/^\/+/, '');
+  const buffer = file.buffer;
+  if (!buffer?.length) {
+    throw new Error('Empty upload');
+  }
+  const url = await putPublicObject(filename, buffer, file.mimetype || 'application/octet-stream');
+  return { filename, url };
+}

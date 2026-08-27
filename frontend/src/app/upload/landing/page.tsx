@@ -14,6 +14,7 @@ import {
   OFFER_DEFAULTS,
   STANDALONE_BANNER_DEFAULT
 } from '@/lib/data';
+import { cmsSrc } from '@/lib/cmsAsset';
 
 const ACCEPTED = 'image/jpeg,image/png,image/gif,image/webp,image/avif,video/mp4,video/webm';
 const ACCEPTED_IMG = 'image/jpeg,image/png,image/webp,image/gif,image/avif';
@@ -34,7 +35,7 @@ function CategoryGrid({ type }: { type: 'gold' | 'silver' }) {
         const len = Math.max(data.length, defs.length);
         setNames(new Array(len).fill('').map((_, i) => data[i]?.name || defs[i]?.name || ''));
         setPreviews(new Array(len).fill(null).map((_, i) =>
-          data[i]?.filename ? `/uploads/${data[i].filename}` : (defs[i]?.img || null)
+          data[i]?.url || data[i]?.filename ? cmsSrc(data[i]?.url || data[i]?.filename) : (defs[i]?.img || null)
         ));
         setFiles(new Array(len).fill(null));
       });
@@ -329,8 +330,8 @@ export default function UploadPage() {
 
   useEffect(() => {
     fetch('/api/upload/hero').then(r => r.json()).then(d => {
-      if (d.filename) {
-        setHeroPreview(`/uploads/${d.filename}`);
+      if (d.url || d.filename) {
+        setHeroPreview(cmsSrc(d.url || d.filename));
         setHeroIsVideo(d.type === 'video');
       } else {
         setHeroPreview(HERO_DEFAULT);
@@ -614,7 +615,7 @@ function OffersEditor() {
     fetch('/api/upload/offers').then(r => r.json()).then((slotsRes: (string | null)[]) => {
       const slots = Array.isArray(slotsRes) ? slotsRes : [];
       const len = Math.max(slots.length, OFFER_FALLBACKS.length);
-      setPreviews(new Array(len).fill(null).map((_, i) => slots[i] ? `/uploads/${slots[i]}` : (OFFER_FALLBACKS[i] || null)));
+      setPreviews(new Array(len).fill(null).map((_, i) => slots[i] ? cmsSrc(slots[i]) : (OFFER_FALLBACKS[i] || null)));
       setFiles(new Array(len).fill(null));
     }).catch(() => {
       setPreviews(OFFER_FALLBACKS);
@@ -760,7 +761,7 @@ function CollectionsEditor() {
 
   useEffect(() => {
     fetch('/api/upload/collections').then(r => r.json()).then((d: { slots: (string | null)[], btnLink?: string }) => {
-      if (d.slots) setPreviews(new Array(3).fill(null).map((_, i) => d.slots[i] ? `/uploads/${d.slots[i]}` : COLLECTION_DEFAULTS[i]));
+      if (d.slots) setPreviews(new Array(3).fill(null).map((_, i) => d.slots[i] ? cmsSrc(d.slots[i]) : COLLECTION_DEFAULTS[i]));
       if (d.btnLink) setBtnLink(d.btnLink);
     });
   }, []);
@@ -882,7 +883,7 @@ function CuratedStylesEditor() {
     fetch('/api/upload/curated').then(r => r.json()).then((d: { slots: (string | null)[], titles: string[] }) => {
       if (d.slots) {
         setPreviews(new Array(12).fill(null).map((_, i) => {
-          if (d.slots[i]) return `/uploads/${d.slots[i]}`;
+          if (d.slots[i]) return cmsSrc(d.slots[i]);
           const groupIdx = Math.floor(i / 4);
           const subIdx = i % 4;
           return CURATED_STYLES_CARDS[groupIdx].images[subIdx];
@@ -1020,7 +1021,7 @@ function DesignLedEditor() {
     fetch('/api/upload/design-led').then(r => r.json()).then(d => {
       if (d.images) {
         setPreviews(new Array(6).fill(null).map((_, i) => {
-          if (d.images[i]) return `/uploads/${d.images[i]}`;
+          if (d.images[i]) return cmsSrc(d.images[i]);
           const groupIdx = Math.floor(i / 2);
           const isSmall = i % 2 === 1;
           return isSmall ? DESIGN_LED_ITEMS[groupIdx].smallImg : DESIGN_LED_ITEMS[groupIdx].largeImg;
@@ -1138,7 +1139,7 @@ function StandaloneBannerEditor() {
 
   useEffect(() => {
     fetch('/api/upload/standalone-banner').then(r => r.json()).then(d => {
-      setPreview(d.banner ? `/uploads/${d.banner}` : STANDALONE_BANNER_DEFAULT);
+      setPreview(d.banner ? cmsSrc(d.banner) : STANDALONE_BANNER_DEFAULT);
     });
   }, []);
 
@@ -1217,7 +1218,7 @@ function TestimonialsEditor() {
       const images = Array.isArray(d?.images) ? d.images : [];
       const len = Math.max(names.length || 0, TESTIMONIAL_REVIEWS.length);
       
-      setPreviews(new Array(len).fill(null).map((_, i) => images[i] ? `/uploads/${images[i]}` : (TESTIMONIAL_REVIEWS[i]?.img || null)));
+      setPreviews(new Array(len).fill(null).map((_, i) => images[i] ? cmsSrc(images[i]) : (TESTIMONIAL_REVIEWS[i]?.img || null)));
       setNames(new Array(len).fill('').map((_, i) => names[i] || TESTIMONIAL_DEFAULT_NAMES[i] || ''));
       setTexts(new Array(len).fill('').map((_, i) => texts[i] || TESTIMONIAL_DEFAULT_TEXTS[i] || ''));
       setFiles(new Array(len).fill(null));
@@ -1354,7 +1355,7 @@ function AboutEditor() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4001'}/api/site/landing/content`)
+    fetch('/api/site/landing/content')
       .then(r => r.json())
       .then(d => {
         if (d.about && d.about.length === 3) setCols(d.about);
@@ -1418,7 +1419,7 @@ function PromiseEditor() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4001'}/api/site/landing/content`)
+    fetch('/api/site/landing/content')
       .then(r => r.json())
       .then(d => {
         if (d.promise && d.promise.length === 6) setLabels(d.promise);
@@ -1572,8 +1573,8 @@ function HeaderEditor() {
     fd.append('navIndex', String(tabIdx));
     const res = await fetch('/api/upload/header?action=upload-callout-image&navIndex=' + tabIdx, { method: 'POST', body: fd });
     const data = await res.json();
-    if (data.filename) {
-      updateCallout(tabIdx, 'image', `/uploads/${data.filename}`);
+    if (data.image || data.url || data.filename) {
+      updateCallout(tabIdx, 'image', cmsSrc(data.image || data.url || data.filename));
     }
   };
 

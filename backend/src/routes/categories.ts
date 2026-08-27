@@ -1,14 +1,14 @@
 import { Router } from 'express';
-import path from 'node:path';
-import fs from 'node:fs';
 import { getContent, setContent } from '../lib/content.js';
-import { upload, UPLOADS_DIR, safeUnlink } from '../lib/upload.js';
+import { upload, safeUnlink } from '../lib/upload.js';
+import { storeCmsUpload } from '../lib/objectStorage.js';
 
 const router = Router();
 
 type CatSlot = {
   name?: string;
   filename?: string | null;
+  url?: string | null;
   uploadedAt?: string;
 } | null;
 
@@ -37,23 +37,26 @@ router.post('/', upload.single('file'), async (req, res) => {
     while (cats.length <= index) cats.push(null);
 
     let filename = cats[index]?.filename ?? null;
+    let url = cats[index]?.url ?? null;
 
     if (req.file) {
-      if (filename) safeUnlink(filename);
-      const ext = path.extname(req.file.originalname) || '.png';
-      filename = `cat_${type || 'gold'}_${index}${ext}`;
-      fs.renameSync(req.file.path, path.join(UPLOADS_DIR, filename));
+      if (url) safeUnlink(url);
+      else if (filename) safeUnlink(filename);
+      const stored = await storeCmsUpload(req.file, `cat_${type || 'gold'}_${index}`);
+      filename = stored.filename;
+      url = stored.url;
     }
 
     cats[index] = {
       ...(cats[index] ?? {}),
       name,
       filename,
+      url,
       uploadedAt: new Date().toISOString(),
     };
 
     await setContent(key, cats);
-    res.json({ success: true, filename });
+    res.json({ success: true, filename, url });
   } catch (err) {
     console.error('[categories] POST', err);
     res.status(500).json({ error: 'Upload failed' });

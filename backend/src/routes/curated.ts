@@ -1,8 +1,7 @@
 import { Router } from 'express';
-import path from 'node:path';
-import fs from 'node:fs';
 import { getContent, setContent } from '../lib/content.js';
-import { upload, UPLOADS_DIR, safeUnlink } from '../lib/upload.js';
+import { upload, safeUnlink } from '../lib/upload.js';
+import { storeCmsUpload } from '../lib/objectStorage.js';
 
 const router = Router();
 
@@ -24,10 +23,8 @@ router.post('/', upload.single('file'), async (req, res) => {
         ...(await getContent<(string | null)[]>('curatedSlots', new Array(12).fill(null))),
       ];
       if (slots[index]) safeUnlink(slots[index]);
-      const ext = path.extname(req.file.originalname) || '.png';
-      const filename = `curated_${index}${ext}`;
-      fs.renameSync(req.file.path, path.join(UPLOADS_DIR, filename));
-      slots[index] = filename;
+      const stored = await storeCmsUpload(req.file, `curated_${index}`);
+      slots[index] = stored.url;
       await setContent('curatedSlots', slots);
     }
 

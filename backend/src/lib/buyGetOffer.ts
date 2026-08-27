@@ -89,7 +89,7 @@ export function normalizeOffer(raw: unknown, idx = 0): BuyGetOffer | null {
     metal_types: asList(row.metal_types),
     groups: asList(row.groups),
     articles: asList(row.articles),
-    max_discount: Number.isFinite(max) && max > 0 ? max : null,
+    max_discount: max != null && Number.isFinite(max) && max > 0 ? max : null,
   };
 }
 

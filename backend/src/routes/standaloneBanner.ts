@@ -1,8 +1,7 @@
 import { Router } from 'express';
-import path from 'node:path';
-import fs from 'node:fs';
 import { getContent, setContent } from '../lib/content.js';
-import { upload, UPLOADS_DIR, safeUnlink } from '../lib/upload.js';
+import { upload, safeUnlink } from '../lib/upload.js';
+import { storeCmsUpload } from '../lib/objectStorage.js';
 
 const router = Router();
 
@@ -18,11 +17,9 @@ router.post('/', upload.single('file'), async (req, res) => {
     const old = await getContent<string | null>('standaloneBanner', null);
     if (old) safeUnlink(old);
 
-    const ext = path.extname(req.file.originalname) || '.png';
-    const filename = `standalone_banner_${Date.now()}${ext}`;
-    fs.renameSync(req.file.path, path.join(UPLOADS_DIR, filename));
-    await setContent('standaloneBanner', filename);
-    res.json({ success: true, filename });
+    const stored = await storeCmsUpload(req.file, `standalone_banner_${Date.now()}`);
+    await setContent('standaloneBanner', stored.url);
+    res.json({ success: true, filename: stored.filename, url: stored.url });
   } catch (err) {
     console.error('[standalone-banner] POST', err);
     res.status(500).json({ error: 'Upload failed' });

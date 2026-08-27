@@ -1,14 +1,17 @@
 
+import { cmsSrc } from '@/lib/cmsAsset';
+
 interface HeroMeta {
   filename: string | null;
+  url?: string | null;
   type: 'image' | 'video' | 'gif' | null;
   originalName: string | null;
   uploadedAt: string | null;
 }
 
-export default async function Hero({ meta = { filename: null, type: null, originalName: null, uploadedAt: null } }: { meta?: HeroMeta | null }) {
+export default async function Hero({ meta = { filename: null, url: null, type: null, originalName: null, uploadedAt: null } }: { meta?: HeroMeta | null }) {
 
-  const src = meta?.filename ? `/uploads/${meta.filename}` : '/images/hero_banner.avif';
+  const src = cmsSrc(meta?.url || meta?.filename) || '/images/hero_banner.avif';
   const isVideo = meta?.type === 'video';
 
   return (

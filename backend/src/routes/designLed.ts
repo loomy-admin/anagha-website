@@ -1,8 +1,7 @@
 import { Router } from 'express';
-import path from 'node:path';
-import fs from 'node:fs';
 import { getContent, setContent } from '../lib/content.js';
-import { upload, UPLOADS_DIR, safeUnlink } from '../lib/upload.js';
+import { upload, safeUnlink } from '../lib/upload.js';
+import { storeCmsUpload } from '../lib/objectStorage.js';
 
 const router = Router();
 const DEFAULT_LABELS = ['Earrings', 'Bangles', 'Necklace'];
@@ -31,10 +30,8 @@ router.post('/', upload.single('file'), async (req, res) => {
         ...(await getContent<(string | null)[]>('designLedImages', new Array(6).fill(null))),
       ];
       if (images[idx]) safeUnlink(images[idx]);
-      const ext = path.extname(req.file.originalname) || '.png';
-      const filename = `designled_${idx}${ext}`;
-      fs.renameSync(req.file.path, path.join(UPLOADS_DIR, filename));
-      images[idx] = filename;
+      const stored = await storeCmsUpload(req.file, `designled_${idx}`);
+      images[idx] = stored.url;
       await setContent('designLedImages', images);
     }
 

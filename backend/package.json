@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.1",
-    "@neondatabase/serverless": "^1.0.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.17",
@@ -35,6 +34,7 @@
     "node-cron": "^4.6.0",
     "nodemailer": "^9.0.5",
     "pdfkit": "^0.20.1",
+    "pg": "^8.23.0",
     "razorpay": "^2.9.8",
     "sharp": "^0.35.4",
     "typescript": "^5.8.3",
@@ -42,6 +42,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@types/pg": "^8.23.1",
     "drizzle-kit": "^0.31.0",
     "tsx": "^4.19.3"
   },

@@ -9,6 +9,7 @@ import Testimonials from '@/components/Testimonials';
 import AboutCompany from '@/components/AboutCompany';
 import PromiseSection from '@/components/Promise';
 import Footer from '@/components/Footer';
+import { cmsSrc } from '@/lib/cmsAsset';
 
 const EMPTY_LANDING = {
   hero: null,
@@ -69,7 +70,7 @@ async function LandingContent() {
       {!visibility.hideBanner && (
         <section className="w-full">
           <img 
-            src={meta.standaloneBanner ? `/uploads/${meta.standaloneBanner}` : "/images/banner_collection.webp"}
+            src={meta.standaloneBanner ? cmsSrc(meta.standaloneBanner) : "/images/banner_collection.webp"}
             alt="Latest Collection Banner" 
             className="w-full h-auto block" 
             draggable={false}

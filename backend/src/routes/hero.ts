@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import path from 'node:path';
-import fs from 'node:fs';
 import { getContent, setContent } from '../lib/content.js';
-import { upload, UPLOADS_DIR, safeUnlink } from '../lib/upload.js';
+import { upload, safeUnlink } from '../lib/upload.js';
+import { storeCmsUpload } from '../lib/objectStorage.js';
 
 const router = Router();
 
 type HeroMeta = {
   filename: string | null;
+  url?: string | null;
   type: 'image' | 'video' | 'gif' | null;
   originalName: string | null;
   uploadedAt: string | null;
@@ -15,6 +16,7 @@ type HeroMeta = {
 
 const emptyHero: HeroMeta = {
   filename: null,
+  url: null,
   type: null,
   originalName: null,
   uploadedAt: null,
@@ -46,19 +48,19 @@ router.post('/', upload.single('file'), async (req, res) => {
       'video/ogg',
     ];
     if (!allowed.includes(req.file.mimetype)) {
-      safeUnlink(req.file.filename);
       return res.status(415).json({ error: 'Unsupported file type' });
     }
 
     const prev = await getContent<HeroMeta>('hero', emptyHero);
-    if (prev.filename) safeUnlink(prev.filename);
+    if (prev.url) safeUnlink(prev.url);
+    else if (prev.filename) safeUnlink(prev.filename);
 
-    const ext = path.extname(req.file.filename);
-    const filename = `hero${ext}`;
-    fs.renameSync(req.file.path, path.join(UPLOADS_DIR, filename));
+    const ext = path.extname(req.file.originalname) || '.bin';
+    const stored = await storeCmsUpload(req.file, `hero${ext}`);
 
     const hero: HeroMeta = {
-      filename,
+      filename: stored.filename,
+      url: stored.url,
       type: mediaType(req.file.mimetype),
       originalName: req.file.originalname,
       uploadedAt: new Date().toISOString(),
@@ -73,7 +75,8 @@ router.post('/', upload.single('file'), async (req, res) => {
 
 router.delete('/', async (_req, res) => {
   const prev = await getContent<HeroMeta>('hero', emptyHero);
-  if (prev.filename) safeUnlink(prev.filename);
+  if (prev.url) safeUnlink(prev.url);
+  else if (prev.filename) safeUnlink(prev.filename);
   await setContent('hero', emptyHero);
   res.json({ success: true });
 });

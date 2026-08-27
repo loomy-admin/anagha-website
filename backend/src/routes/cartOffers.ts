@@ -27,9 +27,8 @@ function payloadFromRow(row: Awaited<ReturnType<typeof getCatalogRowsByTags>>[nu
 
 async function quoteHandler(req: import('express').Request, res: import('express').Response) {
   try {
-    const tags = Array.isArray(req.body?.tag_numbers)
-      ? req.body.tag_numbers.map((t: unknown) => String(t || '').trim().toUpperCase()).filter(Boolean)
-      : [];
+    const rawTags = Array.isArray(req.body?.tag_numbers) ? (req.body.tag_numbers as unknown[]) : [];
+    const tags = rawTags.map((t) => String(t || '').trim().toUpperCase()).filter((t) => t.length > 0);
     const unique = [...new Set(tags)];
     const rows = await getCatalogRowsByTags(unique);
     const lines = rows.filter((row) => row.status === 'available').map(payloadFromRow);

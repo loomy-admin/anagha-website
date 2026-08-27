@@ -2,9 +2,8 @@ import 'dotenv/config';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { neon } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-http';
 import { eq } from 'drizzle-orm';
+import { db, pool } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import { DEFAULT_JEWELLERY_CATEGORIES, DEFAULT_PLANS } from '../lib/defaults.js';
 
@@ -14,9 +13,6 @@ async function main() {
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL is required');
   }
-
-  const sql = neon(process.env.DATABASE_URL);
-  const db = drizzle(sql, { schema });
 
   const metaPath = path.resolve(
     __dirname,
@@ -123,13 +119,14 @@ async function main() {
     console.log('products already populated — skipped');
   }
 
-  // Touch a known key so health of Neon write path is obvious
+  // Touch a known key so the write path is obvious
   const check = await db
     .select()
     .from(schema.siteContent)
     .where(eq(schema.siteContent.key, 'hero'))
     .limit(1);
   console.log('Seed complete. hero present:', Boolean(check[0]));
+  await pool.end();
 }
 
 main().catch((err) => {
