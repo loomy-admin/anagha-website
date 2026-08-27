@@ -1,32 +1,162 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import { fetchErpPublic } from '../lib/erpCatalog.js';
 import {
   applyWebsiteDescription,
   getAllWebsiteItemMeta,
 } from '../lib/websiteItemMeta.js';
-import { getErpVisibility } from '../lib/erpVisibility.js';
 import { getSearchSuggestionsConfig } from '../lib/searchSuggestions.js';
 import { db } from '../db/index.js';
 import { cachedCatalogItems } from '../db/schema.js';
-import { sql, and, eq, ilike, or, desc, asc, gte, lte } from 'drizzle-orm';
+import { slugifyName, toPublicItem } from '../lib/catalogStore.js';
+import { getExtraGroups, getExtraTaxonomy } from '../lib/catalogTaxonomy.js';
+import { sql, and, eq, ilike, or, desc, asc, gte, lte, inArray } from 'drizzle-orm';
 
 const router = Router();
 
-const fullCatalogCache = new Map<string, { body: any; at: number }>();
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
-function getFullCatalogCacheKey(query: Record<string, string | undefined>) {
-  return JSON.stringify({
-    group: query.group || '',
-    type: query.type || '',
-    article: query.article || '',
-    group_id: query.group_id || '',
-    type_id: query.type_id || '',
-    article_id: query.article_id || '',
-    purity: query.purity || '',
-    metal_type: query.metal_type || '',
-    branch_id: query.branch_id || ''
+function mergeExtraTaxonomy(
+  filters: {
+    group: Array<{ slug: string | null; name: string; count: number }>;
+    type: Array<{ slug: string | null; name: string; count: number }>;
+    article: Array<{ slug: string | null; name: string; count: number }>;
+    purity: Array<{ name: string | null; count: number }>;
+    metal_type: Array<{ name: string | null; count: number }>;
+  },
+  extraGroups: Awaited<ReturnType<typeof getExtraGroups>>,
+  extra: Awaited<ReturnType<typeof getExtraTaxonomy>>,
+) {
+  const groupSeen = new Set((filters.group || []).map((g) => g.slug));
+  extraGroups.forEach((g) => {
+    if (!groupSeen.has(g.slug)) {
+      filters.group.push({ slug: g.slug, name: g.name, count: 0 });
+      groupSeen.add(g.slug);
+    } else {
+      const row = filters.group.find((x) => x.slug === g.slug);
+      if (row && g.name) row.name = g.name;
+    }
   });
+  const typeSeen = new Set((filters.type || []).map((g) => g.slug));
+  extra.types.forEach((g) => {
+    if (!typeSeen.has(g.slug)) {
+      filters.type.push({ slug: g.slug, name: g.name, count: 0 });
+      typeSeen.add(g.slug);
+    } else {
+      const row = filters.type.find((x) => x.slug === g.slug);
+      if (row && g.name) row.name = g.name;
+    }
+  });
+  const articleSeen = new Set((filters.article || []).map((g) => g.slug));
+  extra.articles.forEach((g) => {
+    if (!articleSeen.has(g.slug)) {
+      filters.article.push({ slug: g.slug, name: g.name, count: 0 });
+      articleSeen.add(g.slug);
+    } else {
+      const row = filters.article.find((x) => x.slug === g.slug);
+      if (row && g.name) row.name = g.name;
+    }
+  });
+  const metalSeen = new Set((filters.metal_type || []).map((g) => String(g.name || '').toLowerCase()));
+  extra.metals.forEach((name) => {
+    if (!metalSeen.has(name.toLowerCase())) {
+      filters.metal_type.push({ name, count: 0 });
+      metalSeen.add(name.toLowerCase());
+    }
+  });
+  const puritySeen = new Set((filters.purity || []).map((g) => String(g.name || '').toLowerCase()));
+  extra.purities.forEach((name) => {
+    if (!puritySeen.has(name.toLowerCase())) {
+      filters.purity.push({ name, count: 0 });
+      puritySeen.add(name.toLowerCase());
+    }
+  });
+  return filters;
+}
+
+function splitList(value?: string) {
+  return String(value || '')
+    .split(/[|,]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function matchSlugOrName(
+  slugCol: typeof cachedCatalogItems.groupSlug,
+  raw: string,
+  nameExpr: ReturnType<typeof sql>,
+) {
+  const slug = slugifyName(raw) || raw.toLowerCase();
+  return or(eq(slugCol, raw), eq(slugCol, slug), ilike(nameExpr, raw));
+}
+
+type CatalogScope = {
+  group?: string;
+  type?: string;
+  article?: string;
+  article_id?: string;
+  purity?: string;
+  metal_type?: string;
+  search?: string;
+  hasImage?: boolean;
+  priceMin?: number;
+  priceMax?: number;
+  adminBypass?: boolean;
+  status?: string;
+};
+
+type FacetOmit = 'group' | 'type' | 'article' | 'purity' | 'metal';
+
+function articleMatch(raw: string) {
+  const ids = splitList(raw);
+  if (!ids.length) return undefined;
+  const parts = ids.map((part) =>
+    or(
+      matchSlugOrName(cachedCatalogItems.articleSlug, part, sql`data->>'article'`),
+      sql`lower(coalesce(data->>'article_id', '')) = ${part.toLowerCase()}`,
+    ),
+  );
+  return parts.length === 1 ? parts[0] : or(...parts);
+}
+
+async function buildCatalogConditions(scope: CatalogScope, omit?: FacetOmit) {
+  const conditions = [];
+  const statusFilter = String(scope.status || '').trim().toLowerCase();
+  if (scope.adminBypass && ['sold', 'available', 'hidden', 'reserved'].includes(statusFilter)) {
+    conditions.push(eq(cachedCatalogItems.status, statusFilter));
+  } else if (!scope.adminBypass) {
+    conditions.push(eq(cachedCatalogItems.status, 'available'));
+  }
+
+  if (omit !== 'group' && scope.group) {
+    conditions.push(matchSlugOrName(cachedCatalogItems.groupSlug, scope.group, sql`data->>'group'`));
+  }
+  if (omit !== 'type' && scope.type) {
+    conditions.push(matchSlugOrName(cachedCatalogItems.typeSlug, scope.type, sql`data->>'type'`));
+  }
+  if (omit !== 'article' && (scope.article || scope.article_id)) {
+    const match = articleMatch(scope.article_id || scope.article || '');
+    if (match) conditions.push(match);
+  }
+  if (omit !== 'metal' && scope.metal_type) {
+    conditions.push(ilike(cachedCatalogItems.metalType, `%${scope.metal_type}%`));
+  }
+  if (omit !== 'purity' && scope.purity) {
+    conditions.push(ilike(cachedCatalogItems.purity, `%${scope.purity}%`));
+  }
+  if (scope.hasImage) conditions.push(eq(cachedCatalogItems.hasImage, true));
+  if (scope.priceMin && !isNaN(scope.priceMin) && scope.priceMin > 0) {
+    conditions.push(gte(cachedCatalogItems.displayPrice, scope.priceMin));
+  }
+  if (scope.priceMax && !isNaN(scope.priceMax) && scope.priceMax > 0) {
+    conditions.push(lte(cachedCatalogItems.displayPrice, scope.priceMax));
+  }
+  if (scope.search) {
+    const searchTerm = scope.search.toLowerCase();
+    conditions.push(
+      or(
+        ilike(sql`data->>'name'`, `%${searchTerm}%`),
+        ilike(cachedCatalogItems.tagNumber, `%${searchTerm}%`),
+      ),
+    );
+  }
+  return conditions.length ? and(...conditions) : undefined;
 }
 
 function pickQuery(req: Request, keys: string[]) {
@@ -58,6 +188,10 @@ let cachedFilters: {
   at: number;
 } | null = null;
 
+export function invalidateCatalogFilters() {
+  cachedFilters = null;
+}
+
 const TAXONOMY_ALIASES: Record<string, string[]> = {
   bangle: ['bangles', 'bangle', 'kada', 'kadas', 'valayal'],
   bangles: ['bangles', 'bangle', 'kada', 'kadas', 'valayal'],
@@ -80,21 +214,94 @@ const TAXONOMY_ALIASES: Record<string, string[]> = {
   bracelets: ['bracelet', 'bracelets', 'kada'],
 };
 
-async function getCachedFilters(branchId?: string) {
-  if (cachedFilters && Date.now() - cachedFilters.at < 5 * 60 * 1000) {
+async function queryFilters(scope: CatalogScope) {
+  const slugOk = (col: typeof cachedCatalogItems.groupSlug) =>
+    sql`${col} is not null and ${col} <> ''`;
+
+  const [groupWhere, typeWhere, articleWhere, purityWhere, metalWhere] = await Promise.all([
+    buildCatalogConditions(scope, 'group'),
+    buildCatalogConditions(scope, 'type'),
+    buildCatalogConditions(scope, 'article'),
+    buildCatalogConditions(scope, 'purity'),
+    buildCatalogConditions(scope, 'metal'),
+  ]);
+
+  const [groups, types, articles, purities, metals] = await Promise.all([
+    db
+      .select({
+        slug: cachedCatalogItems.groupSlug,
+        name: sql<string>`min(${cachedCatalogItems.data}->>'group')`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(cachedCatalogItems)
+      .where(groupWhere ? and(groupWhere, slugOk(cachedCatalogItems.groupSlug)) : slugOk(cachedCatalogItems.groupSlug))
+      .groupBy(cachedCatalogItems.groupSlug),
+    db
+      .select({
+        slug: cachedCatalogItems.typeSlug,
+        name: sql<string>`min(${cachedCatalogItems.data}->>'type')`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(cachedCatalogItems)
+      .where(typeWhere ? and(typeWhere, slugOk(cachedCatalogItems.typeSlug)) : slugOk(cachedCatalogItems.typeSlug))
+      .groupBy(cachedCatalogItems.typeSlug),
+    db
+      .select({
+        slug: cachedCatalogItems.articleSlug,
+        name: sql<string>`min(${cachedCatalogItems.data}->>'article')`,
+        id: sql<string>`min(${cachedCatalogItems.data}->>'article_id')`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(cachedCatalogItems)
+      .where(articleWhere ? and(articleWhere, slugOk(cachedCatalogItems.articleSlug)) : slugOk(cachedCatalogItems.articleSlug))
+      .groupBy(cachedCatalogItems.articleSlug),
+    db
+      .select({
+        name: cachedCatalogItems.purity,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(cachedCatalogItems)
+      .where(
+        purityWhere
+          ? and(purityWhere, sql`${cachedCatalogItems.purity} is not null and ${cachedCatalogItems.purity} <> ''`)
+          : sql`${cachedCatalogItems.purity} is not null and ${cachedCatalogItems.purity} <> ''`,
+      )
+      .groupBy(cachedCatalogItems.purity),
+    db
+      .select({
+        name: cachedCatalogItems.metalType,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(cachedCatalogItems)
+      .where(
+        metalWhere
+          ? and(metalWhere, sql`${cachedCatalogItems.metalType} is not null and ${cachedCatalogItems.metalType} <> ''`)
+          : sql`${cachedCatalogItems.metalType} is not null and ${cachedCatalogItems.metalType} <> ''`,
+      )
+      .groupBy(cachedCatalogItems.metalType),
+  ]);
+
+  return {
+    group: groups.map((g) => ({ slug: g.slug, name: g.name || g.slug, count: Number(g.count || 0) })),
+    type: types.map((g) => ({ slug: g.slug, name: g.name || g.slug, count: Number(g.count || 0) })),
+    article: articles.map((g) => ({
+      slug: g.slug,
+      name: g.name || g.slug,
+      id: g.id || undefined,
+      count: Number(g.count || 0),
+    })),
+    purity: purities.map((g) => ({ name: g.name, count: Number(g.count || 0) })),
+    metal_type: metals.map((g) => ({ name: g.name, count: Number(g.count || 0) })),
+  };
+}
+
+async function getCachedFilters() {
+  if (cachedFilters && Date.now() - cachedFilters.at < 15 * 1000) {
     return cachedFilters.data;
   }
-  try {
-    const res = await fetchErpPublic('/filters', branchId ? { branch_id: branchId } : {});
-    const filters = res?.data?.filters || res?.filters;
-    if (filters) {
-      cachedFilters = { data: filters, at: Date.now() };
-      return filters;
-    }
-  } catch (err) {
-    console.warn('[filters/cache-error]', err);
-  }
-  return cachedFilters?.data || null;
+  const filters = await queryFilters({ adminBypass: false });
+  cachedFilters = { data: { filters }, at: Date.now() };
+  return cachedFilters.data;
 }
 
 function normalizeStem(word: string): string {
@@ -105,7 +312,7 @@ function normalizeStem(word: string): string {
   return w;
 }
 
-/** GET /api/catalog — live ERP available inventory for this store instance */
+/** GET /api/catalog — Neon cached_catalog_items only (ERP is import-only). */
 router.get('/', async (req: Request, res: Response) => {
   try {
     const query = pickQuery(req, [
@@ -120,194 +327,146 @@ router.get('/', async (req: Request, res: Response) => {
       'article_id',
       'purity',
       'metal_type',
-      'branch_id',
       'sort',
+      'status',
     ]);
 
     const searchTerm = String(query.search || '').trim().toLowerCase();
-    
     const originalLimit = Number(query.limit) || 48;
     const originalOffset = Number(query.offset) || 0;
-    
-    const erpQuery: Record<string, string | undefined> = { ...query };
-    const sort = req.query.sort as string;
+    const sort = String(query.sort || '').trim().toLowerCase();
     const priceMin = Number(req.query.price_min);
     const priceMax = Number(req.query.price_max);
-
-    // PATH B: Sorted Browsing (Read from Postgres DB)
-    if (sort) {
-      const conditions = [];
-      if (erpQuery.group) conditions.push(eq(cachedCatalogItems.groupSlug, erpQuery.group));
-      if (erpQuery.type) conditions.push(eq(cachedCatalogItems.typeSlug, erpQuery.type.toLowerCase()));
-      if (erpQuery.article) conditions.push(ilike(cachedCatalogItems.articleSlug, `%${erpQuery.article}%`));
-      if (erpQuery.metal_type) conditions.push(ilike(cachedCatalogItems.metalType, `%${erpQuery.metal_type}%`));
-      if (erpQuery.purity) conditions.push(ilike(cachedCatalogItems.purity, `%${erpQuery.purity}%`));
-      if (req.query.has_image === 'true') conditions.push(eq(cachedCatalogItems.hasImage, true));
-      if (!isNaN(priceMin) && priceMin > 0) conditions.push(gte(cachedCatalogItems.displayPrice, priceMin));
-      if (!isNaN(priceMax) && priceMax > 0) conditions.push(lte(cachedCatalogItems.displayPrice, priceMax));
-      if (searchTerm) {
-        conditions.push(
-          or(
-            ilike(sql`data->>'name'`, `%${searchTerm}%`),
-            ilike(cachedCatalogItems.tagNumber, `%${searchTerm}%`)
-          )
-        );
-      }
-
-      let orderBy = asc(cachedCatalogItems.erpCreatedAt);
-      if (sort === 'price_asc') orderBy = asc(cachedCatalogItems.displayPrice);
-      else if (sort === 'price_desc') orderBy = desc(cachedCatalogItems.displayPrice);
-      else if (sort === 'newest') orderBy = desc(cachedCatalogItems.erpCreatedAt);
-      else if (sort === 'name_asc') orderBy = sql`data->>'name' ASC`;
-      else if (sort === 'name_desc') orderBy = sql`data->>'name' DESC`;
-      else if (sort === 'image_first') orderBy = desc(cachedCatalogItems.hasImage);
-
-      const itemsQuery = db.select({ data: cachedCatalogItems.data })
-        .from(cachedCatalogItems)
-        .where(and(...conditions))
-        .orderBy(orderBy)
-        .limit(originalLimit)
-        .offset(originalOffset);
-        
-      const countQuery = db.select({ count: sql<number>`count(*)` })
-        .from(cachedCatalogItems)
-        .where(and(...conditions));
-        
-      const [itemsRes, countRes] = await Promise.all([itemsQuery, countQuery]);
-      return res.json({
-        data: {
-          items: itemsRes.map((r: any) => r.data),
-          total: Number(countRes[0]?.count || 0)
-        }
-      });
-    }
-
-    // PATH A: Unsorted Browsing (Real-Time Batched Over-fetching from ERP)
-    const cacheKey = getFullCatalogCacheKey(erpQuery) + `&limit=${originalLimit}&offset=${originalOffset}&has_image=${req.query.has_image}&priceMin=${priceMin}&priceMax=${priceMax}`;
-    const hit = fullCatalogCache.get(cacheKey);
-    if (hit && Date.now() - hit.at < CACHE_TTL_MS) {
-      return res.json(hit.body);
-    }
-
-    const visibility = await getErpVisibility();
-    const metaMap = await getAllWebsiteItemMeta();
-
     const adminBypass = req.query.admin_bypass === 'true';
+    const statusFilter = String(req.query.status || query.status || '').trim().toLowerCase();
 
-    const collectedVisibleItems: any[] = [];
-    let erpOffset = 0;
-    const batchLimit = 50;
-    let erpTotal = 0;
-    const targetCount = originalOffset + originalLimit; // e.g. for page 2 (offset 24, limit 24), we need 48 visible items total, then slice last 24
+    const whereExpr = await buildCatalogConditions({
+      group: query.group,
+      type: query.type,
+      article: query.article,
+      article_id: query.article_id,
+      purity: query.purity,
+      metal_type: query.metal_type,
+      search: searchTerm,
+      hasImage: req.query.has_image === 'true',
+      priceMin,
+      priceMax,
+      adminBypass,
+      status: statusFilter,
+    });
 
-    while (collectedVisibleItems.length < targetCount) {
-      const batchQuery = { ...erpQuery, limit: String(batchLimit), offset: String(erpOffset) };
-      const batchRes = await fetchErpPublic('/catalog', batchQuery);
-      
-      if (!batchRes?.data?.items || batchRes.data.items.length === 0) break;
-      erpTotal = batchRes.data.total;
+    let orderBy = desc(cachedCatalogItems.erpCreatedAt);
+    if (statusFilter === 'sold') orderBy = desc(cachedCatalogItems.soldAt);
+    if (sort === 'price_asc') orderBy = asc(cachedCatalogItems.displayPrice);
+    else if (sort === 'price_desc') orderBy = desc(cachedCatalogItems.displayPrice);
+    else if (sort === 'newest' && statusFilter !== 'sold') orderBy = desc(cachedCatalogItems.erpCreatedAt);
+    else if (sort === 'name_asc') orderBy = sql`data->>'name' ASC`;
+    else if (sort === 'name_desc') orderBy = sql`data->>'name' DESC`;
+    else if (sort === 'image_first') orderBy = desc(cachedCatalogItems.hasImage);
 
-      const filtered = batchRes.data.items.filter((item: any) => {
-        if (!adminBypass) {
-          const groupSlug = String(item.group_slug || '').toLowerCase();
-          const tag = String(item.tag_number || '');
-          const hasCat = visibility.visibleCategories.length > 0;
-          const hasProd = visibility.visibleProducts.length > 0;
-          
-          if (hasCat || hasProd) {
-            const catVisible = visibility.visibleCategories.includes(groupSlug);
-            const prodVisible = visibility.visibleProducts.includes(tag);
-            if (!catVisible && !prodVisible) return false;
-          }
-        }
-        if (req.query.has_image === 'true' && !item.image_url && !item.pos_image_url && !(Array.isArray(item.website_images) && item.website_images.length > 0)) return false;
-        const price = item.display_price || 0;
-        if (!isNaN(priceMin) && priceMin > 0 && price < priceMin) return false;
-        if (!isNaN(priceMax) && priceMax > 0 && price > priceMax) return false;
-        return true;
-      });
+    const itemsQuery = db
+      .select()
+      .from(cachedCatalogItems)
+      .where(whereExpr)
+      .orderBy(orderBy)
+      .limit(originalLimit)
+      .offset(originalOffset);
 
-      collectedVisibleItems.push(...filtered.map((item: any) => applyWebsiteDescription(item, metaMap)));
-      
-      erpOffset += batchLimit;
-      if (batchRes.data.items.length < batchLimit) break; // Reached end
-    }
+    const countQuery = db
+      .select({ count: sql<number>`count(*)` })
+      .from(cachedCatalogItems)
+      .where(whereExpr);
 
-    const finalItems = collectedVisibleItems.slice(originalOffset, originalOffset + originalLimit);
-    const body = {
+    const [itemsRes, countRes] = await Promise.all([itemsQuery, countQuery]);
+    const metaMap = await getAllWebsiteItemMeta();
+    return res.json({
       data: {
-        items: finalItems,
-        total: erpTotal // Return raw total for stable pagination
-      }
-    };
-
-    fullCatalogCache.set(cacheKey, { body: JSON.parse(JSON.stringify(body)), at: Date.now() });
-    res.json(body);
+        items: itemsRes.map((row) =>
+          applyWebsiteDescription(toPublicItem(row), metaMap),
+        ),
+        total: Number(countRes[0]?.count || 0),
+      },
+    });
   } catch (err) {
     handleErpError(err, res);
   }
 });
 
-/** GET /api/catalog/filters — ERP taxonomy facets from live stock */
+/** GET /api/catalog/filters — taxonomy facets (scoped like ERP /filters) */
 router.get('/filters', async (req: Request, res: Response) => {
   try {
-    const body = await fetchErpPublic(
-      '/filters',
-      pickQuery(req, [
-        'type',
-        'group',
-        'article',
-        'type_id',
-        'group_id',
-        'article_id',
-        'branch_id',
-      ]),
-    );
-    
-    // Filter out categories not marked as visible unless bypassed by admin
+    const q = pickQuery(req, [
+      'type',
+      'group',
+      'article',
+      'article_id',
+      'purity',
+      'metal_type',
+      'search',
+    ]);
     const adminBypass = req.query.admin_bypass === 'true';
-    if (!adminBypass) {
-      const visibility = await getErpVisibility();
-      const hasCat = visibility.visibleCategories.length > 0;
-      const hasProd = visibility.visibleProducts.length > 0;
-      
-      // If they only use visibleCategories, we can filter the sidebar. 
-      // If they use visibleProducts, we don't filter the sidebar so they can still click categories that have specific products visible.
-      if (hasCat && !hasProd) {
-        if (body?.data?.filters?.group) {
-          body.data.filters.group = body.data.filters.group.filter((g: any) => {
-            const slug = g.slug || String(g.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-            return visibility.visibleCategories.includes(slug);
-          });
-        }
-        if (body?.filters?.group) {
-          body.filters.group = body.filters.group.filter((g: any) => {
-            const slug = g.slug || String(g.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-            return visibility.visibleCategories.includes(slug);
-          });
-        }
+    const scope: CatalogScope = {
+      group: q.group,
+      type: q.type,
+      article: q.article,
+      article_id: q.article_id,
+      purity: q.purity,
+      metal_type: q.metal_type,
+      search: q.search,
+      hasImage: req.query.has_image === 'true',
+      adminBypass,
+    };
+    const scoped = Boolean(
+      scope.group ||
+        scope.type ||
+        scope.article ||
+        scope.article_id ||
+        scope.purity ||
+        scope.metal_type ||
+        scope.search ||
+        scope.hasImage,
+    );
+
+    let filters;
+    if (adminBypass && !scoped) {
+      filters = await queryFilters({ adminBypass: true });
+      const [extraGroups, extraTaxonomy] = await Promise.all([getExtraGroups(), getExtraTaxonomy()]);
+      mergeExtraTaxonomy(filters, extraGroups, extraTaxonomy);
+    } else if (!adminBypass && !scoped) {
+      const body = await getCachedFilters();
+      filters = body.filters;
+    } else {
+      filters = await queryFilters(scope);
+      if (adminBypass) {
+        const [extraGroups, extraTaxonomy] = await Promise.all([getExtraGroups(), getExtraTaxonomy()]);
+        mergeExtraTaxonomy(filters, extraGroups, extraTaxonomy);
       }
     }
-    
-    res.json(body);
+
+    res.json({ data: { filters } });
   } catch (err) {
     handleErpError(err, res);
   }
 });
 
-/** GET /api/catalog/items/:tag — single available item PDP */
+/** GET /api/catalog/items/:tag — single website catalog item */
 router.get('/items/:tag', async (req: Request, res: Response) => {
   try {
-    const tag = String(req.params.tag || '').trim();
-    const body = await fetchErpPublic(
-      `/items/${encodeURIComponent(tag)}`,
-      pickQuery(req, ['branch_id']),
-    );
-    const metaMap = await getAllWebsiteItemMeta();
-    if (body?.data) {
-      body.data = applyWebsiteDescription(body.data, metaMap);
+    const tag = String(req.params.tag || '').trim().toUpperCase();
+    const adminBypass = req.query.admin_bypass === 'true';
+    const rows = await db
+      .select()
+      .from(cachedCatalogItems)
+      .where(eq(cachedCatalogItems.tagNumber, tag))
+      .limit(1);
+    const row = rows[0];
+    if (!row) return res.status(404).json({ error: 'Item not found' });
+    if (!adminBypass && row.status !== 'available') {
+      return res.status(404).json({ error: 'Item not found' });
     }
-    res.json(body);
+    const metaMap = await getAllWebsiteItemMeta();
+    const data = applyWebsiteDescription(toPublicItem(row), metaMap);
+    res.json({ data });
   } catch (err) {
     handleErpError(err, res);
   }
@@ -321,9 +480,8 @@ router.get('/suggestions', async (req: Request, res: Response) => {
       const config = await getSearchSuggestionsConfig();
       const defaultCategories: Array<{ name: string; slug: string; type: string }> = [];
       try {
-        const branchId = typeof req.query.branch_id === 'string' ? req.query.branch_id : undefined;
-        const filtersRes = await getCachedFilters(branchId);
-        const groups = (filtersRes?.group || filtersRes?.data?.filters?.group || []) as Array<{ name: string; slug?: string }>;
+        const filtersRes = await getCachedFilters();
+        const groups = (filtersRes?.filters?.group || []) as Array<{ name: string; slug?: string }>;
         
         let selectedGroups: Array<{ name: string; slug?: string }> = [];
         if (config.trendingCategories && config.trendingCategories.length > 0) {
@@ -347,34 +505,47 @@ router.get('/suggestions', async (req: Request, res: Response) => {
         if (config.whatsNewTags && config.whatsNewTags.length > 0) {
           const rawTags = config.whatsNewTags.map(t => t.trim()).filter(Boolean);
           const tags = Array.from(new Set(rawTags));
-          const itemPromises = tags.map(tag => fetchErpPublic(`/items/${encodeURIComponent(tag)}`, { branch_id: typeof req.query.branch_id === 'string' ? req.query.branch_id : undefined }).catch(() => null));
-          const itemsResponses = await Promise.all(itemPromises);
-          
-          defaultProducts = itemsResponses.filter(res => res && res.data).map(res => {
-            const item = res.data;
+          const rows = await db
+            .select()
+            .from(cachedCatalogItems)
+            .where(
+              and(
+                eq(cachedCatalogItems.status, 'available'),
+                inArray(
+                  cachedCatalogItems.tagNumber,
+                  tags.map((t) => t.toUpperCase()),
+                ),
+              ),
+            );
+          defaultProducts = rows.map((row) => {
+            const item = toPublicItem(row);
             return {
-              tag_number: String(item.tag_number || ''),
+              tag_number: row.tagNumber,
               name: String(item.name || ''),
-              image_url: item.image_url || item.pos_image_url || null,
+              image_url: item.image_url || null,
               display_price: item.display_price != null ? Number(item.display_price) : null,
-              group_slug: item.group_slug || null,
+              group_slug: item.group_slug || row.groupSlug,
             };
           });
         }
 
         if (defaultProducts.length === 0) {
-          const body = await fetchErpPublic('/catalog', { limit: '20' });
-          if (body?.data?.items && Array.isArray(body.data.items)) {
-            const items = [...body.data.items];
-            items.sort((a: any, b: any) => String(b.id || b.tag_number).localeCompare(String(a.id || a.tag_number)));
-            defaultProducts = items.slice(0, 3).map((item: any) => ({
-              tag_number: String(item.tag_number || ''),
+          const newest = await db
+            .select()
+            .from(cachedCatalogItems)
+            .where(eq(cachedCatalogItems.status, 'available'))
+            .orderBy(desc(cachedCatalogItems.erpCreatedAt))
+            .limit(3);
+          defaultProducts = newest.map((row) => {
+            const item = toPublicItem(row);
+            return {
+              tag_number: row.tagNumber,
               name: String(item.name || ''),
-              image_url: item.image_url || item.pos_image_url || null,
+              image_url: item.image_url || null,
               display_price: item.display_price != null ? Number(item.display_price) : null,
-              group_slug: item.group_slug || null,
-            }));
-          }
+              group_slug: item.group_slug || row.groupSlug,
+            };
+          });
         }
       } catch {}
 
@@ -382,7 +553,6 @@ router.get('/suggestions', async (req: Request, res: Response) => {
       return;
     }
 
-    const branchId = typeof req.query.branch_id === 'string' ? req.query.branch_id : undefined;
     const tokens = q.split(/\s+/).filter(Boolean);
     const stems = tokens.map(normalizeStem);
     const searchAliases = tokens.flatMap(
@@ -393,12 +563,12 @@ router.get('/suggestions', async (req: Request, res: Response) => {
     const categories: Array<{ name: string; slug: string; type: string }> = [];
     const seenSlugs = new Set<string>();
     try {
-      const filtersRes = await getCachedFilters(branchId);
-      const groups = (filtersRes?.group || filtersRes?.data?.filters?.group || []) as Array<{
+      const filtersRes = await getCachedFilters();
+      const groups = (filtersRes?.filters?.group || []) as Array<{
         name: string;
         slug?: string;
       }>;
-      const articles = (filtersRes?.article || filtersRes?.data?.filters?.article || []) as Array<{
+      const articles = (filtersRes?.filters?.article || []) as Array<{
         name: string;
         slug?: string;
       }>;
@@ -462,25 +632,33 @@ router.get('/suggestions', async (req: Request, res: Response) => {
     };
     let products: SuggestionProduct[] = [];
     try {
-      const erpQuery: Record<string, string | undefined> = {
-        search: q,
-        limit: '5',
-        branch_id: branchId,
-      };
-      const body = await fetchErpPublic('/catalog', erpQuery);
-      if (body?.data?.items && Array.isArray(body.data.items)) {
-        products = body.data.items.slice(0, 5).map(
-          (item: Record<string, unknown>) => ({
-            tag_number: String(item.tag_number || ''),
-            name: String(item.name || ''),
-            image_url: item.image_url || item.pos_image_url || null,
-            display_price: item.display_price != null ? Number(item.display_price) : null,
-            group_slug: item.group_slug || null,
-          }),
-        );
-      }
+      const rows = await db
+        .select()
+        .from(cachedCatalogItems)
+        .where(
+          and(
+            eq(cachedCatalogItems.status, 'available'),
+            or(
+              ilike(cachedCatalogItems.tagNumber, `%${q}%`),
+              ilike(sql`data->>'name'`, `%${q}%`),
+              ilike(cachedCatalogItems.groupSlug, `%${q}%`),
+              ilike(cachedCatalogItems.articleSlug, `%${q}%`),
+            ),
+          ),
+        )
+        .limit(5);
+      products = rows.map((row) => {
+        const item = toPublicItem(row);
+        return {
+          tag_number: row.tagNumber,
+          name: String(item.name || ''),
+          image_url: item.image_url || null,
+          display_price: item.display_price != null ? Number(item.display_price) : null,
+          group_slug: item.group_slug || row.groupSlug,
+        };
+      });
     } catch {
-      /* ERP unavailable — return categories only */
+      /* catalog unavailable — return categories only */
     }
 
     res.json({ products, categories });

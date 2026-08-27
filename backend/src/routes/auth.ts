@@ -202,25 +202,46 @@ router.put('/me/sync', requireCustomer, async (req, res) => {
 
 router.post('/google', async (req: Request, res: Response) => {
   try {
-    const { credential } = req.body;
-    if (!credential) return res.status(400).json({ error: 'Google credential missing' });
-    
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    if (!clientId) throw new Error('GOOGLE_CLIENT_ID not configured on server');
+    const { credential, accessToken } = req.body as {
+      credential?: string;
+      accessToken?: string;
+    };
 
-    const client = new OAuth2Client(clientId);
-    const ticket = await client.verifyIdToken({
-      idToken: credential,
-      audience: clientId,
-    });
-    
-    const payload = ticket.getPayload();
-    if (!payload || !payload.email) {
-      return res.status(400).json({ error: 'Invalid Google token payload' });
+    let email = '';
+    let name = 'Google User';
+
+    if (credential) {
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      if (!clientId) throw new Error('GOOGLE_CLIENT_ID not configured on server');
+
+      const client = new OAuth2Client(clientId);
+      const ticket = await client.verifyIdToken({
+        idToken: credential,
+        audience: clientId,
+      });
+
+      const payload = ticket.getPayload();
+      if (!payload?.email) {
+        return res.status(400).json({ error: 'Invalid Google token payload' });
+      }
+      email = normalizeEmail(payload.email);
+      name = payload.name || 'Google User';
+    } else if (accessToken) {
+      const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!profileRes.ok) {
+        return res.status(401).json({ error: 'Invalid Google token' });
+      }
+      const profile = (await profileRes.json()) as { email?: string; name?: string };
+      if (!profile.email) {
+        return res.status(400).json({ error: 'Invalid Google token payload' });
+      }
+      email = normalizeEmail(profile.email);
+      name = profile.name || 'Google User';
+    } else {
+      return res.status(400).json({ error: 'Google credential missing' });
     }
-
-    const email = normalizeEmail(payload.email);
-    const name = payload.name || 'Google User';
 
     let [customer] = await db
       .select()

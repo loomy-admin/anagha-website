@@ -143,6 +143,17 @@ async function main() {
   await sql`CREATE INDEX IF NOT EXISTS checkout_sessions_customer_idx ON checkout_sessions (website_customer_id)`;
 
   await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS shipping_address JSONB DEFAULT '{}'::jsonb`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS items_amount TEXT`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS shipping_amount TEXT DEFAULT '0'`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS shipping_method_id TEXT`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS shipping_method_name TEXT`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS shipping_eta TEXT`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS courier_name TEXT`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS tracking_number TEXT`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS tracking_url TEXT`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS packed_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS cached_catalog_items (
@@ -167,6 +178,11 @@ async function main() {
   await sql`CREATE INDEX IF NOT EXISTS group_date_idx ON cached_catalog_items (group_slug, erp_created_at)`;
   await sql`CREATE INDEX IF NOT EXISTS type_date_idx ON cached_catalog_items (type_slug, erp_created_at)`;
   await sql`CREATE INDEX IF NOT EXISTS article_date_idx ON cached_catalog_items (article_slug, erp_created_at)`;
+
+  await sql`ALTER TABLE cached_catalog_items ADD COLUMN IF NOT EXISTS origin TEXT NOT NULL DEFAULT 'erp'`;
+  await sql`ALTER TABLE cached_catalog_items ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'available'`;
+  await sql`ALTER TABLE cached_catalog_items ADD COLUMN IF NOT EXISTS sold_at TIMESTAMPTZ`;
+  await sql`CREATE INDEX IF NOT EXISTS catalog_status_idx ON cached_catalog_items (status)`;
 
   console.log('Migration complete.');
 }

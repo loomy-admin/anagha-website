@@ -1,6 +1,6 @@
 /**
- * ERP public catalog client (multi-client ready).
- * Configure per deployment via ERP_API_URL + ERP_STORE_SLUG (+ optional ERP_BRANCH_ID).
+ * ERP public catalog client — used only by Re-import ERP (syncCatalog).
+ * After import, listing/search/filters/PDP/checkout/images use Neon + our storage only.
  */
 
 function trimSlash(url: string) {

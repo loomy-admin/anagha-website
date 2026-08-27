@@ -6,13 +6,20 @@ export type CheckoutCartItem = {
   type_slug?: string | null;
 };
 
+export type CheckoutLineItem = {
+  name: string;
+  tag_number: string;
+};
+
 export type CheckoutSession = {
   id: string;
+  order_id?: string | null;
   status: string;
   tag_number: string;
   tag_numbers?: string[];
   /** Article / product names for the purchased lines. */
   item_names?: string[];
+  items?: CheckoutLineItem[];
   amount: number;
   currency: string;
   customer_name?: string | null;
@@ -20,11 +27,23 @@ export type CheckoutSession = {
   customer_email?: string | null;
   erp_bill_id?: string | null;
   erp_bill_number?: string | null;
-  /** Public ERP invoice URL for iframe / open-in-tab */
+  /** Website bill page URL for iframe / open-in-tab */
   bill_url?: string | null;
   expires_at?: string | null;
   payment_provider?: 'razorpay';
   created_at?: string | null;
+  items_amount?: number;
+  shipping_amount?: number;
+  shipping_method_id?: string | null;
+  shipping_method_name?: string | null;
+  shipping_eta?: string | null;
+  shipping_address?: Record<string, unknown> | null;
+  courier_name?: string | null;
+  tracking_number?: string | null;
+  tracking_url?: string | null;
+  packed_at?: string | null;
+  shipped_at?: string | null;
+  delivered_at?: string | null;
 };
 
 export type CheckoutPayment = {
@@ -185,6 +204,7 @@ export async function createCheckoutSession(input: {
   tag_number?: string;
   tag_numbers?: string[];
   shippingAddress?: any;
+  shipping_method_id?: string;
 }) {
   const tags = (input.tag_numbers?.length
     ? input.tag_numbers
@@ -198,6 +218,9 @@ export async function createCheckoutSession(input: {
   const payload: any = tags.length === 1 ? { tag_number: tags[0] } : { tag_numbers: tags };
   if (input.shippingAddress) {
     payload.shippingAddress = input.shippingAddress;
+  }
+  if (input.shipping_method_id) {
+    payload.shipping_method_id = input.shipping_method_id;
   }
 
   const res = await fetch('/api/checkout/session', {
@@ -282,4 +305,33 @@ export async function confirmRazorpayCheckout(
     throw new Error(body.error || 'Razorpay confirmation failed');
   }
   return body.data as CheckoutSession;
+}
+
+export function publicOrderId(session: CheckoutSession) {
+  return (
+    session.order_id ||
+    session.erp_bill_number ||
+    `AJ-${String(session.id || '').slice(0, 8).toUpperCase()}`
+  );
+}
+
+export function orderLineItems(session: CheckoutSession): CheckoutLineItem[] {
+  if (Array.isArray(session.items) && session.items.length) {
+    return session.items
+      .map((item) => ({
+        name: String(item.name || 'Jewellery').trim() || 'Jewellery',
+        tag_number: String(item.tag_number || '').trim().toUpperCase(),
+      }))
+      .filter((item) => item.tag_number || item.name);
+  }
+  const tags = session.tag_numbers?.length
+    ? session.tag_numbers
+    : session.tag_number
+      ? [session.tag_number]
+      : [];
+  const names = session.item_names || [];
+  return tags.map((tag, idx) => ({
+    name: names[idx] || 'Jewellery',
+    tag_number: tag,
+  }));
 }

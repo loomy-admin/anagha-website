@@ -60,7 +60,7 @@ const BagIcon = () => (
   </svg>
 );
 const WhatsAppIcon = () => (
-  <svg className="w-[22px] h-[22px]" fill="currentColor" viewBox="0 0 24 24">
+  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
   </svg>
 );
@@ -83,6 +83,8 @@ function sortByCountDesc(groups: CatalogFilterOption[]) {
 type NavCache = {
   navItems: NavItem[];
   allGroups: Array<{ label: string; slug: string }>;
+  logoUrl?: string;
+  logoIconUrl?: string;
   at: number;
 };
 const ALL_JEWELLERY: NavItem = { label: 'ALL JEWELLERY', slug: 'all-jewellery', dropdown: null };
@@ -181,6 +183,8 @@ export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [navItems, setNavItems] = useState<NavItem[]>([ALL_JEWELLERY]);
   const [allGroups, setAllGroups] = useState<Array<{ label: string; slug: string }>>([]);
+  const [logoUrl, setLogoUrl] = useState<string>('/images/brand_logo.png');
+  const [logoIconUrl, setLogoIconUrl] = useState<string>('/images/logo_icon.png');
   const [customer, setCustomer] = useState<WebsiteCustomer | null>(() => 
     customerCache === undefined ? null : customerCache
   );
@@ -308,6 +312,8 @@ export default function Header() {
     if (existing) {
       setAllGroups(existing.allGroups);
       setNavItems(existing.navItems);
+      if (existing.logoUrl) setLogoUrl(existing.logoUrl);
+      if (existing.logoIconUrl) setLogoIconUrl(existing.logoIconUrl);
     }
 
     async function loadNav() {
@@ -320,6 +326,9 @@ export default function Header() {
 
         let picked = navFromHeaderGroups(headerCfg?.selectedGroups);
         let nextAll = existing?.allGroups || [];
+        
+        if (headerCfg?.logoUrl) setLogoUrl(headerCfg.logoUrl);
+        if (headerCfg?.logoIconUrl) setLogoIconUrl(headerCfg.logoIconUrl);
 
         // Paint admin tabs immediately — never wait on ERP catalog for the bar.
         if (picked.length) {
@@ -328,6 +337,8 @@ export default function Header() {
           writeStoredNav({
             navItems: adminNav,
             allGroups: nextAll,
+            logoUrl: headerCfg?.logoUrl,
+            logoIconUrl: headerCfg?.logoIconUrl,
             at: Date.now(),
           });
         }
@@ -347,7 +358,13 @@ export default function Header() {
         }
 
         const nextNav: NavItem[] = [...picked, ALL_JEWELLERY];
-        writeStoredNav({ navItems: nextNav, allGroups: nextAll, at: Date.now() });
+        writeStoredNav({ 
+          navItems: nextNav, 
+          allGroups: nextAll, 
+          logoUrl: headerCfg?.logoUrl,
+          logoIconUrl: headerCfg?.logoIconUrl,
+          at: Date.now() 
+        });
         setAllGroups(nextAll);
         setNavItems(nextNav);
       } catch {
@@ -380,9 +397,9 @@ export default function Header() {
     <>
       {/* Mobile header */}
       <div className="flex flex-col lg:hidden bg-white shrink-0 sticky top-0 z-[100] shadow-sm">
-        <div className="flex items-center justify-between px-4 h-16">
-          <div className="flex items-center gap-3">
-            <button aria-label="Menu" className="text-navy" onClick={() => setMobileMenuOpen(true)}>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center px-3 xs:px-4 h-14 sm:h-16 gap-2">
+          <div className="flex items-center gap-1.5 xs:gap-2 min-w-0">
+            <button aria-label="Menu" className="text-navy p-1 -ml-1 shrink-0" onClick={() => setMobileMenuOpen(true)}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
@@ -391,32 +408,32 @@ export default function Header() {
               href={`https://wa.me/${whatsapp.replace(/[^0-9]/g, '')}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-10 h-10 rounded-full border border-gray-100 flex items-center justify-center text-[#f1592a] hover:bg-[#f1592a] hover:text-white hover:border-[#f1592a] transition-all"
+              className="hidden xs:flex w-9 h-9 sm:w-10 sm:h-10 rounded-full border border-gray-100 items-center justify-center text-[#f1592a] hover:bg-[#f1592a] hover:text-white hover:border-[#f1592a] transition-all shrink-0"
             >
               <WhatsAppIcon />
             </a>
-            <div className="w-7 h-7 rounded-full overflow-hidden border border-gray-300 flex items-center justify-center bg-white shrink-0">
+            <div className="hidden sm:flex w-7 h-7 rounded-full overflow-hidden border border-gray-300 items-center justify-center bg-white shrink-0">
               <img
-                src="/images/logo_icon.png"
+                src={logoIconUrl}
                 alt="Logo"
                 className="w-full h-full object-contain [clip-path:circle(47%)] scale-[0.85]"
               />
             </div>
           </div>
-          <Link href="/" className="flex items-center">
+          <Link href="/" className="flex items-center justify-center min-w-0 px-1">
             <Image
-              src="/images/brand_logo.png"
+              src={logoUrl}
               alt="Anagha"
               width={120}
               height={40}
-              className="h-10 w-auto object-contain [clip-path:inset(1px_4px)]"
+              className="h-8 sm:h-10 w-auto max-w-[140px] sm:max-w-[180px] object-contain [clip-path:inset(1px_4px)]"
               style={{ width: 'auto' }}
               unoptimized
               priority
             />
           </Link>
-          <div className="flex items-center gap-4 text-navy">
-            <Link href="/wishlist" aria-label="Wishlist" className="relative inline-flex hover:text-coral transition-colors">
+          <div className="flex items-center justify-end gap-3 sm:gap-4 text-navy">
+            <Link href="/wishlist" aria-label="Wishlist" className="relative inline-flex hover:text-coral transition-colors p-0.5">
               <HeartIcon />
               {wishlistCount > 0 ? (
                 <span className="absolute -top-1 -right-2 min-w-[15px] h-[15px] px-0.5 rounded-full bg-[#f1592a] text-white text-[9px] flex items-center justify-center font-bold">
@@ -424,7 +441,7 @@ export default function Header() {
                 </span>
               ) : null}
             </Link>
-            <Link href="/cart" aria-label="Shopping cart" className="relative inline-flex hover:text-coral transition-colors">
+            <Link href="/cart" aria-label="Shopping cart" className="relative inline-flex hover:text-coral transition-colors p-0.5">
               <BagIcon />
               {cartCount > 0 ? (
                 <span className="absolute -top-1 -right-2 min-w-[15px] h-[15px] px-0.5 rounded-full bg-[#f1592a] text-white text-[9px] flex items-center justify-center font-bold">
@@ -485,7 +502,7 @@ export default function Header() {
         <div className="fixed inset-0 bg-white z-[200] flex flex-col lg:hidden overflow-hidden">
           <div className="flex items-center justify-between p-4 border-b border-gray-300">
             <Image
-              src="/images/brand_logo.png"
+              src={logoUrl}
               alt="Anagha"
               width={120}
               height={40}
@@ -518,6 +535,14 @@ export default function Header() {
 
           <div className="flex-1 overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap gap-4 text-[12px] font-semibold text-navy">
+              <a
+                href={`https://wa.me/${whatsapp.replace(/[^0-9]/g, '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                WhatsApp
+              </a>
               <Link href="/cart" onClick={() => setMobileMenuOpen(false)}>
                 Cart{cartCount > 0 ? ` (${cartCount})` : ''}
               </Link>
@@ -575,7 +600,7 @@ export default function Header() {
         <div className="flex items-end h-[76px] pl-[120px] xl:pl-[130px] pr-4 xl:pr-10 pb-[10px]">
           <Link href="/" className="flex items-center shrink-0 translate-y-2.5">
             <Image
-              src="/images/brand_logo.png"
+              src={logoUrl}
               alt="Anagha"
               width={280}
               height={80}
@@ -680,16 +705,13 @@ export default function Header() {
                 href={`https://wa.me/${whatsapp.replace(/[^0-9]/g, '')}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex flex-row items-center justify-center gap-2 bg-[#25D366] text-white font-bold text-[10px] xl:text-[11px] leading-tight cursor-pointer whitespace-nowrap w-auto px-4 py-1.5 rounded-full shadow-sm transition-all"
+                className={`${ITEM3} relative hover:text-coral transition-colors mr-3`}
+                aria-label="WhatsApp"
               >
-                <WhatsAppIcon />
-                <span>
-                  Connect
-                  <br />
-                  With Us
+                <span className="relative inline-flex text-navy items-center justify-center">
+                  <WhatsAppIcon />
                 </span>
               </a>
-              <span className={VDIV} />
               <Link href="/wishlist" className={`${ITEM3} relative mr-3 hover:text-coral transition-colors`} aria-label="Wishlist">
                 <span className="relative inline-flex text-navy">
                   <HeartIcon />
@@ -716,14 +738,16 @@ export default function Header() {
       </div>
 
       {/* Desktop navy nav — ERP groups */}
-      <nav className="sticky top-0 z-50 bg-navy h-[46px] hidden lg:flex items-center px-10 overflow-x-clip w-full max-w-[100vw]">
-        <div
+      <nav className="sticky top-0 z-50 bg-navy h-[46px] hidden lg:flex items-center px-10 overflow-visible w-full max-w-[100vw]">
+        <Link
+          href="/"
+          aria-label="Home"
           className={`absolute left-10 z-50 transition-all duration-300 ease-in-out origin-top-left bg-white rounded-full overflow-hidden shadow-sm flex items-center justify-center ${
             scrolled ? 'w-[30px] h-[30px] top-[8px]' : 'w-[75px] h-[75px] -top-[64px]'
           }`}
         >
           <Image
-            src="/images/logo_icon.png"
+            src={logoIconUrl}
             alt="Anagha"
             width={75}
             height={75}
@@ -731,30 +755,37 @@ export default function Header() {
             unoptimized
             priority
           />
-        </div>
+        </Link>
 
-        <ul className="flex items-center h-full w-full justify-center gap-2 xl:gap-5 list-none pl-10">
-          {navItems.map((item) => {
+        <ul className="flex items-center h-full w-full justify-center gap-2 xl:gap-5 list-none pl-10 min-w-0">
+          {navItems.map((item, index) => {
               const isAll = item.slug === 'all-jewellery';
               const hasMega = !isAll;
               const articles = item.dropdown?.articles || [];
               const callout = item.dropdown?.callout;
+              const isFirst = index === 0;
+              const isLast = index === navItems.length - 1;
+              const megaPos = isFirst
+                ? 'left-0 translate-x-0'
+                : isLast
+                  ? 'left-auto right-0 translate-x-0'
+                  : 'left-1/2 -translate-x-1/2';
               return (
                 <li
                   key={item.slug}
-                  className="group relative flex items-center h-full px-1 text-white text-[10.5px] xl:text-[12px] font-medium whitespace-nowrap hover:bg-white/10 transition-colors"
+                  className="group relative flex items-center h-full px-1.5 xl:px-2 text-white text-[10px] xl:text-[12px] font-medium whitespace-nowrap hover:bg-white/10 transition-colors after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-3 after:bg-transparent"
                 >
                   <Link
                     href={isAll ? '/jewellery' : `/jewellery/${item.slug}`}
-                    className="flex items-center gap-1 h-full"
+                    className="flex items-center gap-0.5 h-full"
                   >
                     {item.label}
-                    <span className="text-[13px] xl:text-[15px] leading-none">▾</span>
+                    <span className="text-[12px] xl:text-[15px] leading-none opacity-80">▾</span>
                   </Link>
 
                   {isAll && allGroups.length > 0 ? (
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 bg-white shadow-2xl w-[520px] max-h-[70vh] overflow-y-auto py-6 rounded-b-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] border-t-2 border-navy">
-                      <div className="px-8">
+                    <div className={`absolute top-full ${megaPos} pt-0 bg-white shadow-2xl w-[min(520px,calc(100vw-1.5rem))] max-h-[70vh] overflow-y-auto py-6 rounded-b-md border-t-2 border-navy z-[120] invisible opacity-0 pointer-events-none group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-150`}>
+                      <div className="px-6 xl:px-8">
                         <h4 className="text-navy font-bold text-[14px] mb-4 border-b border-gray-200 pb-2">
                           Shop by category
                         </h4>
@@ -781,8 +812,8 @@ export default function Header() {
                   ) : null}
 
                   {hasMega ? (
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 bg-white shadow-2xl w-[640px] max-w-[90vw] py-6 rounded-b-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] border-t-2 border-navy">
-                      <div className="px-8 grid grid-cols-2 gap-10">
+                    <div className={`absolute top-full ${megaPos} bg-white shadow-2xl w-[min(640px,calc(100vw-1.5rem))] max-h-[70vh] overflow-y-auto py-6 rounded-b-md border-t-2 border-navy z-[120] invisible opacity-0 pointer-events-none group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-150`}>
+                      <div className="px-5 xl:px-8 grid grid-cols-1 sm:grid-cols-2 gap-6 xl:gap-10">
                         <div>
                           <h4 className="text-navy font-bold text-[14px] mb-3 border-b border-gray-200 pb-2">
                             By Price Range

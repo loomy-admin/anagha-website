@@ -8,6 +8,7 @@ export interface ContactInfoConfig {
   phone: string;
   corporateEmail: string;
   salesEmail: string;
+  supportEmail: string;
   instagram?: string;
   youtube?: string;
   address1?: string;
@@ -22,6 +23,7 @@ const DEFAULT_CONFIG: ContactInfoConfig = {
   phone: '18004190066',
   corporateEmail: 'corporate.sales@anagha.com',
   salesEmail: 'sales@anagha.com',
+  supportEmail: 'support@anagha.com',
   instagram: 'https://www.instagram.com/anaghasilver_92.5?igsh=dnRiOTY4YWlzb2oy',
   youtube: 'https://www.youtube.com',
   address1: '',

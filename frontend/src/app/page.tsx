@@ -1,5 +1,3 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import Header from '@/components/Header';
 import Hero from '@/components/Hero';
 import Categories from '@/components/Categories';
@@ -11,22 +9,25 @@ import Testimonials from '@/components/Testimonials';
 import AboutCompany from '@/components/AboutCompany';
 import PromiseSection from '@/components/Promise';
 import Footer from '@/components/Footer';
+
+const EMPTY_LANDING = {
+  hero: null,
+  goldCategories: [],
+  silverCategories: [],
+  offers: [],
+  landing_visibility: {},
+};
+
 async function getMeta() {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL || 'http://localhost:4001';
   try {
-    const res = await fetch('http://127.0.0.1:4001/api/site/landing/content', {
-      next: { revalidate: 0 },
+    const res = await fetch(`${API_URL}/api/site/landing/content`, {
+      cache: 'no-store',
     });
-    if (!res.ok) throw new Error('Failed to fetch landing content');
+    if (!res.ok) return EMPTY_LANDING;
     return await res.json();
-  } catch (err) {
-    console.error('Error fetching landing content:', err);
-    return {
-      hero: null,
-      goldCategories: [],
-      silverCategories: [],
-      offers: [],
-      landing_visibility: {}
-    };
+  } catch {
+    return EMPTY_LANDING;
   }
 }
 
@@ -105,7 +106,7 @@ export default function Home() {
   return (
     <>
       <Header />
-      <main className="flex flex-col gap-y-8 md:gap-y-12 pb-8 md:pb-12 overflow-x-clip w-full max-w-[100vw]">
+      <main className="flex flex-col gap-y-0 md:gap-y-8 pb-8 md:pb-12 overflow-x-clip w-full max-w-[100vw]">
         <Suspense fallback={<LandingSkeleton />}>
           <LandingContent />
         </Suspense>

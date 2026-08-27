@@ -19,6 +19,7 @@ import {
   fetchCatalogFilters,
   formatDisplayPrice,
   itemHref,
+  slugifyName,
 } from '@/lib/erpCatalog';
 import ProductCard from './ProductCard';
 
@@ -106,6 +107,21 @@ function mergeArticleOptions(
   );
 }
 
+const PAGE_SIZE = 48;
+
+function optionValue(item: CatalogFilterOption) {
+  return String(item.slug || slugifyName(item.name) || item.name || '').trim();
+}
+
+function optionSelected(selected: string | undefined, item: CatalogFilterOption) {
+  if (!selected) return false;
+  const a = selected.trim().toLowerCase();
+  return [item.slug, item.name, slugifyName(item.name || '')]
+    .map((v) => String(v || '').trim().toLowerCase())
+    .filter(Boolean)
+    .includes(a);
+}
+
 const FilterGroup = ({
   title,
   items,
@@ -124,13 +140,13 @@ const FilterGroup = ({
         <p className="text-[12px] text-gray-400">No options</p>
       ) : (
         items.map((f) => {
-          const isOn = selected === f.name;
+          const isOn = optionSelected(selected, f);
           return (
             <button
               key={`${title}-${f.id || f.slug || f.name}`}
               type="button"
               onClick={() => {
-                const next = isOn ? undefined : f.name;
+                const next = isOn ? undefined : optionValue(f);
                 startTransition(() => onSelect(next));
               }}
               className="flex items-center gap-3 cursor-pointer group w-full text-left"
@@ -223,12 +239,14 @@ function FiltersBody({
   filterOptions,
   active,
   setActive,
+  setPage,
   loading,
 }: {
   category?: string;
   filterOptions: FilterOptions;
   active: ActiveFilters;
   setActive: Dispatch<SetStateAction<ActiveFilters>>;
+  setPage: Dispatch<SetStateAction<number>>;
   loading?: boolean;
 }) {
   const articleOptions = mergeArticleOptions(filterOptions.article, active.articles);
@@ -237,6 +255,11 @@ function FiltersBody({
     || filterOptions.group.length > 0
     || articleOptions.length > 0
     || filterOptions.purity.length > 0;
+
+  function patch(next: SetStateAction<ActiveFilters>) {
+    setPage(1);
+    setActive(next);
+  }
 
   // Fixed shell so panel height does not jump between loading / loaded.
   return (
@@ -260,21 +283,21 @@ function FiltersBody({
               <button
                 type="button"
                 className="w-full text-left flex items-center gap-3 group transition-all"
-                onClick={() => setActive((prev) => ({ ...prev, hasImage: !prev.hasImage, articles: [] }))}
+                onClick={() => patch((prev) => ({ ...prev, hasImage: !prev.hasImage, articles: [] }))}
               >
                 <div
-                  className={`w-[18px] h-[18px] flex-shrink-0 rounded-[4px] border-[1.5px] flex items-center justify-center transition-all duration-200 ${
+                  className={`w-4 h-4 border rounded-[2px] flex-shrink-0 transition-colors flex items-center justify-center ${
                     active.hasImage
-                      ? 'border-[#032C5E] bg-[#032C5E] text-white shadow-sm'
-                      : 'border-gray-300 bg-white text-transparent group-hover:border-gray-400'
+                      ? 'border-[#032C5E] text-[#032C5E]'
+                      : 'border-gray-300 bg-white text-transparent group-hover:border-[#032C5E]'
                   }`}
                 >
                   <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12"></polyline>
                   </svg>
                 </div>
-                <span className={`text-[13px] ${active.hasImage ? 'text-[#032C5E] font-medium' : 'text-[#444]'}`}>
-                  Only items with images
+                <span className={`text-[13px] uppercase ${active.hasImage ? 'text-[#032C5E] font-medium' : 'text-[#444]'}`}>
+                  PRODUCTS WITH IMAGES
                 </span>
               </button>
             </div>
@@ -285,7 +308,7 @@ function FiltersBody({
               items={filterOptions.type}
               selected={active.type}
               onSelect={(name) =>
-                setActive((prev) => ({ ...prev, type: name, articles: [] }))
+                patch((prev) => ({ ...prev, type: name, articles: [] }))
               }
             />
           ) : null}
@@ -295,7 +318,7 @@ function FiltersBody({
               items={filterOptions.group}
               selected={active.group || category}
               onSelect={(name) =>
-                setActive((prev) => ({ ...prev, group: name, articles: [] }))
+                patch((prev) => ({ ...prev, group: name, articles: [] }))
               }
             />
           ) : null}
@@ -305,7 +328,7 @@ function FiltersBody({
               items={articleOptions}
               selected={active.articles}
               onToggle={(option) =>
-                setActive((prev) => ({
+                patch((prev) => ({
                   ...prev,
                   articles: toggleArticle(prev.articles, option),
                 }))
@@ -317,7 +340,7 @@ function FiltersBody({
               title="Purity"
               items={filterOptions.purity}
               selected={active.purity}
-              onSelect={(name) => setActive((prev) => ({ ...prev, purity: name }))}
+              onSelect={(name) => patch((prev) => ({ ...prev, purity: name }))}
             />
           ) : null}
         </div>
@@ -347,7 +370,7 @@ type ListingCacheEntry = {
 
 /** Survives client navigations so /jewellery does not flash the full-page loader. */
 const listingCache = new Map<string, ListingCacheEntry>();
-const LISTING_CACHE_TTL_MS = 15 * 60 * 1000;
+const LISTING_CACHE_TTL_MS = 30 * 1000;
 const EMPTY_FILTER_OPTIONS: FilterOptions = {
   type: [],
   group: [],
@@ -486,7 +509,7 @@ export default function JewelleryListing({ category, audience, article, search, 
   const activeCount = countActiveFilters(active, category);
 
   const queryParams = useMemo(() => {
-    const limit = 24;
+    const limit = PAGE_SIZE;
     const offset = (page - 1) * limit;
     const params: Record<string, string | number | undefined> = {
       limit,
@@ -534,10 +557,13 @@ export default function JewelleryListing({ category, audience, article, search, 
 
     try {
       const filterQuery: Record<string, string | undefined> = {};
-      if (active.group) filterQuery.group = active.group;
-      else if (category) filterQuery.group = category;
-      if (active.type) filterQuery.type = active.type;
-      else if (audienceType) filterQuery.type = audienceType;
+      if (queryParams.group) filterQuery.group = String(queryParams.group);
+      if (queryParams.type) filterQuery.type = String(queryParams.type);
+      if (queryParams.article) filterQuery.article = String(queryParams.article);
+      if (queryParams.article_id) filterQuery.article_id = String(queryParams.article_id);
+      if (queryParams.purity) filterQuery.purity = String(queryParams.purity);
+      if (queryParams.has_image) filterQuery.has_image = String(queryParams.has_image);
+      if (queryParams.search) filterQuery.search = String(queryParams.search);
 
       const [catalog, filtersPayload] = await Promise.all([
         fetchCatalog(queryParams),
@@ -601,7 +627,7 @@ export default function JewelleryListing({ category, audience, article, search, 
   };
 
   return (
-    <main className="w-full bg-[#f9f9f9] min-h-screen font-sans pb-24 lg:pb-20">
+    <main className="w-full bg-[#f9f9f9] min-h-screen font-sans pb-28 lg:pb-20">
       <div className="max-w-[1400px] mx-auto px-4 md:px-8 mt-6">
         {searchTerm ? (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
@@ -644,6 +670,7 @@ export default function JewelleryListing({ category, audience, article, search, 
                 filterOptions={filterOptions}
                 active={active}
                 setActive={setActive}
+                setPage={setPage}
                 loading={initialLoading}
               />
             </div>
@@ -651,15 +678,15 @@ export default function JewelleryListing({ category, audience, article, search, 
 
           {/* Product grid — full width on mobile; keep layout stable while refreshing */}
           <div className="flex-1 w-full min-w-0 relative">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-sm text-gray-500 hidden md:block">
-                {total > 0 ? `Showing ${(page - 1) * 48 + 1} - ${Math.min(page * 48, total)} of ${total} items` : ''}
+            <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 mb-4">
+              <span className="text-xs sm:text-sm text-gray-500">
+                {total > 0 ? `Showing ${(page - 1) * PAGE_SIZE + 1} - ${Math.min(page * PAGE_SIZE, total)} of ${total} items` : ''}
               </span>
-              <div className="flex items-center gap-2 ml-auto">
+              <div className="flex items-center gap-2 xs:ml-auto min-w-0">
                 <label htmlFor="sort-select" className="text-sm font-medium text-gray-600 hidden sm:block">Sort by:</label>
                 <select
                   id="sort-select"
-                  className="text-sm border border-gray-300 rounded-md py-1.5 px-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#032C5E] focus:border-[#032C5E] text-gray-700 font-medium cursor-pointer"
+                  className="text-sm border border-gray-300 rounded-md py-1.5 px-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#032C5E] focus:border-[#032C5E] text-gray-700 font-medium cursor-pointer w-full xs:w-auto max-w-full"
                   value={active.sort || ''}
                   onChange={(e) => {
                     const nextSort = e.target.value;
@@ -691,7 +718,7 @@ export default function JewelleryListing({ category, audience, article, search, 
                 <h2 className="text-xl font-domine text-gray-700 mb-2">Catalog unavailable</h2>
                 <p className="text-gray-400 text-sm max-w-md">{error}</p>
                 <p className="text-gray-400 text-xs mt-3">
-                  Ensure Anagha backend has ERP_API_URL and ERP_STORE_SLUG configured.
+                  Catalog is loaded from the website database. Try again, or Re-import ERP from admin if stock is empty.
                 </p>
               </div>
             ) : items.length === 0 ? (
@@ -739,7 +766,7 @@ export default function JewelleryListing({ category, audience, article, search, 
                   ))}
                 </div>
                 
-                {total > 48 ? (
+                {total > PAGE_SIZE ? (
                   <div className="mt-12 flex justify-center items-center gap-2">
                     <button
                       type="button"
@@ -753,11 +780,11 @@ export default function JewelleryListing({ category, audience, article, search, 
                       Previous
                     </button>
                     <span className="text-sm text-gray-600 px-4 font-medium">
-                      Page {page} of {Math.ceil(total / 48)}
+                      Page {page} of {Math.ceil(total / PAGE_SIZE)}
                     </span>
                     <button
                       type="button"
-                      disabled={page >= Math.ceil(total / 48)}
+                      disabled={page >= Math.ceil(total / PAGE_SIZE)}
                       onClick={() => {
                         setPage((p) => p + 1);
                         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -848,6 +875,7 @@ export default function JewelleryListing({ category, audience, article, search, 
                 filterOptions={filterOptions}
                 active={active}
                 setActive={setActive}
+                setPage={setPage}
                 loading={initialLoading}
               />
             </div>

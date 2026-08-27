@@ -75,7 +75,7 @@ export default function PromiseSection({ labels }: { labels?: string[] }) {
         >
           {/* Left Titling */}
           <div className="w-full lg:w-[45%] flex justify-start lg:justify-end pr-0 lg:pr-[140px] relative z-10 mb-12 lg:mb-0">
-            <h2 className="text-[#032C5E] font-domine text-[42px] sm:text-[48px] lg:text-[80px] leading-[1.05] font-medium text-left lg:text-right relative">
+            <h2 className="text-[#032C5E] font-domine text-[32px] xs:text-[42px] sm:text-[48px] lg:text-[80px] leading-[1.05] font-medium text-left lg:text-right relative">
               Anagha<br />
               <span className="relative inline-flex items-center">
                 Promis

@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { type CatalogItem, formatDisplayPrice } from '@/lib/erpCatalog';
+import { type CatalogItem, formatDisplayPrice, getPrimaryImage } from '@/lib/erpCatalog';
 import { isInWishlist, toggleWishlist, WISHLIST_CHANGED_EVENT, type WishlistItem } from '@/lib/wishlist';
 
 function itemHref(item: CatalogItem) {
@@ -36,7 +36,7 @@ export default function ProductCard({ product }: { product: CatalogItem }) {
       tag_number: product.tag_number,
       name: product.name || 'Jewellery',
       display_price: product.display_price,
-      image_url: product.image_url,
+      image_url: getPrimaryImage(product),
       type_slug: product.type_slug,
       group_slug: product.group_slug,
       purity: product.purity,
@@ -72,9 +72,9 @@ export default function ProductCard({ product }: { product: CatalogItem }) {
 
       <div className="relative w-full aspect-square bg-[#fafafa] overflow-hidden shrink-0">
         <div className="absolute inset-0 p-4 sm:p-6 flex items-center justify-center">
-          {(product.image_url || (Array.isArray(product.website_images) && product.website_images.length > 0)) ? (
+          {getPrimaryImage(product) ? (
             <Image
-              src={product.image_url || (Array.isArray(product.website_images) ? product.website_images[0] : '')}
+              src={getPrimaryImage(product)!}
               alt={product.name}
               fill
               sizes="(max-width: 768px) 50vw, 25vw"
@@ -86,7 +86,7 @@ export default function ProductCard({ product }: { product: CatalogItem }) {
           )}
         </div>
       </div>
-      <div className="p-4 flex flex-col flex-1 items-start text-left bg-white">
+      <div className="p-2.5 sm:p-4 flex flex-col flex-1 items-start text-left bg-white">
         <div className="flex items-center gap-2 mb-1.5 flex-wrap min-h-[24px]">
           <span className={`font-bold text-[15px] md:text-[16px] ${showPrice ? 'text-[#222]' : 'text-gray-500 text-[13px]'}`}>
             {priceLabel}

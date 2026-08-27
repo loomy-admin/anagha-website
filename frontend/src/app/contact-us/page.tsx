@@ -22,16 +22,36 @@ export default function ContactUs() {
   const { whatsapp, email, phone, corporateEmail, salesEmail, addresses } = useContactInfo();
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', query: '' });
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      const res = await fetch('/api/site/contact/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      if (res.ok) {
+        setSubmitted(true);
+      } else {
+        setErrorMsg('Something went wrong. Please try again.');
+      }
+    } catch (error) {
+      console.error('Submission error:', error);
+      setErrorMsg('Failed to connect to the server.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <>
       <Header />
-      <main className="w-full bg-white min-h-screen py-16 lg:py-20 font-sans">
+      <main className="w-full bg-white min-h-screen py-10 sm:py-16 lg:py-20 font-sans">
         <div className="max-w-[1200px] mx-auto px-4 md:px-8">
 
           {/* Page Title */}
@@ -151,8 +171,8 @@ export default function ContactUs() {
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-6 text-[14px] text-[#4a4a4a]">
                   {/* Name */}
-                  <div className="flex items-start gap-6">
-                    <label className="w-[80px] shrink-0 pt-2 text-[#4a4a4a] font-medium">Name</label>
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-6">
+                    <label className="w-auto sm:w-[80px] shrink-0 sm:pt-2 text-[#4a4a4a] font-medium">Name</label>
                     <input
                       type="text"
                       placeholder="Enter name"
@@ -164,8 +184,8 @@ export default function ContactUs() {
                   </div>
 
                   {/* Email */}
-                  <div className="flex items-start gap-6">
-                    <label className="w-[80px] shrink-0 pt-2 text-[#4a4a4a] font-medium">Email</label>
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-6">
+                    <label className="w-auto sm:w-[80px] shrink-0 sm:pt-2 text-[#4a4a4a] font-medium">Email</label>
                     <input
                       type="email"
                       placeholder="Enter email"
@@ -177,8 +197,8 @@ export default function ContactUs() {
                   </div>
 
                   {/* Phone */}
-                  <div className="flex items-start gap-6">
-                    <label className="w-[80px] shrink-0 pt-2 text-[#4a4a4a] font-medium">Phone</label>
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-6">
+                    <label className="w-auto sm:w-[80px] shrink-0 sm:pt-2 text-[#4a4a4a] font-medium">Phone</label>
                     <div className="flex flex-1 border-b border-gray-200 focus-within:border-[#f1592a] transition-colors">
                       <span className="text-[#4a4a4a] font-semibold pr-3 py-2 text-[14px] shrink-0">+91</span>
                       <input
@@ -192,22 +212,28 @@ export default function ContactUs() {
                   </div>
 
                   {/* Query */}
-                  <div className="flex items-start gap-6">
-                    <label className="w-[80px] shrink-0 pt-2 text-[#4a4a4a] font-medium">Query</label>
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-6">
+                    <label className="w-auto sm:w-[80px] shrink-0 sm:pt-2 text-[#4a4a4a] font-medium">Query</label>
                     <textarea
+                      required
                       placeholder="Enter query"
                       rows={4}
                       value={formData.query}
-                      onChange={e => setFormData(f => ({ ...f, query: e.target.value }))}
+                      onChange={(e) => setFormData({ ...formData, query: e.target.value })}
                       className="flex-1 border-0 border-b border-gray-200 outline-none py-2 text-[14px] text-[#222] placeholder-gray-300 focus:border-[#f1592a] transition-colors resize-none bg-transparent"
-                    />
+                    ></textarea>
                   </div>
+
+                  {errorMsg && (
+                    <div className="text-red-500 text-sm font-semibold">{errorMsg}</div>
+                  )}
 
                   <button
                     type="submit"
-                    className="w-full bg-[#f1592a] text-white py-4 font-bold text-[13px] tracking-widest uppercase hover:bg-[#d04a20] transition-colors rounded-sm"
+                    disabled={loading}
+                    className="w-full bg-[#f1592a] text-white py-4 font-bold text-[13px] tracking-widest uppercase hover:bg-[#d04a20] transition-colors rounded-sm disabled:opacity-50"
                   >
-                    Submit
+                    {loading ? 'Sending...' : 'Submit'}
                   </button>
 
                   {/* WhatsApp Banner — below submit */}
@@ -215,14 +241,14 @@ export default function ContactUs() {
                     href={`https://wa.me/${whatsapp.replace(/[^0-9]/g, '')}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-2 flex items-center justify-between gap-4 bg-[#25D366] rounded-xl px-5 py-4 shadow hover:shadow-md hover:brightness-105 transition-all duration-200 group"
+                    className="mt-2 flex items-center justify-between gap-3 sm:gap-4 bg-[#25D366] rounded-xl px-4 sm:px-5 py-4 shadow hover:shadow-md hover:brightness-105 transition-all duration-200 group"
                   >
-                    <div className="flex items-center gap-3 text-white">
+                    <div className="flex items-center gap-3 text-white min-w-0">
                       <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center shrink-0">
                         <WhatsAppIcon />
                       </div>
-                      <div>
-                        <p className="font-bold text-[14px] font-domine leading-tight">Connect With Us on WhatsApp</p>
+                      <div className="min-w-0">
+                        <p className="font-bold text-[13px] sm:text-[14px] font-domine leading-tight">Connect With Us on WhatsApp</p>
                         <p className="text-white/85 text-[12px] mt-0.5">Fastest response — anytime, anywhere</p>
                       </div>
                     </div>

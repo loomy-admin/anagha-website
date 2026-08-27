@@ -13,7 +13,7 @@ export default function AboutCompany({ data }: { data?: { title: string; text: s
   const cols = data && data.length === 3 ? data : DEFAULT_DATA;
 
   return (
-    <section className="bg-[#fffbfa] pt-4 pb-16 relative overflow-hidden">
+    <section className="bg-[#fffbfa] pt-4 pb-12 sm:pb-16 relative overflow-hidden">
       <div className="max-w-[1300px] mx-auto px-4 lg:px-8 relative z-10">
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-10">
