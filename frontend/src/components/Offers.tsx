@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { cmsSrc } from '@/lib/cmsAsset';
 
 const DEFAULTS = [
   '/images/offers/offer_4.jpg',
@@ -16,7 +17,7 @@ interface Props {
 
 export default function Offers({ live }: Props) {
   const slides = (live.length > 0
-    ? live.map((filename, i) => (filename ? `/uploads/${filename}` : DEFAULTS[i] || ''))
+    ? live.map((filename, i) => (filename ? cmsSrc(filename) : DEFAULTS[i] || ''))
     : DEFAULTS
   ).filter(Boolean);
 

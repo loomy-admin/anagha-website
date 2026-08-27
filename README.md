@@ -1,13 +1,16 @@
 # Anagha Website
 
-Monorepo with a Next.js frontend and Express + Neon backend.
+Monorepo with a Next.js frontend and Express + Postgres backend.
 
 ```
 anagha-website/
 ├── frontend/     # Next.js app (UI + admin upload pages)
-├── backend/      # Express API + Neon Postgres
+├── backend/      # Express API + Postgres (Cloud SQL in production)
+├── docs/         # GCP_DEPLOY.md — manual Cloud Run / Cloud SQL / GCS setup
 └── package.json  # workspace scripts
 ```
+
+Production hosting is **GCP only** (Cloud Run + Cloud SQL + Cloud Storage). Follow [docs/GCP_DEPLOY.md](docs/GCP_DEPLOY.md). Local Dockerfiles: `frontend/Dockerfile`, `backend/Dockerfile`.
 
 ## Setup
 
@@ -32,7 +35,8 @@ cp frontend/.env.example frontend/.env.local
 
 # Backend
 cp backend/.env.example backend/.env
-# then set DATABASE_URL from Neon
+# then set DATABASE_URL (Postgres: local, Neon TCP, or Cloud SQL Auth Proxy)
+# Production GCP: see docs/GCP_DEPLOY.md
 # and ERP catalog + checkout wiring:
 #   ERP_API_URL=http://localhost:4000/api
 #   ERP_STORE_SLUG=<org-slug-from-octis>
@@ -46,7 +50,7 @@ cp backend/.env.example backend/.env
 #   PUBLIC_API_BASE_URL=http://localhost:4001
 ```
 
-Jewellery catalog pages load **live available inventory** from Octis ERP via the Anagha BFF (`/api/catalog`). Checkout uses **Buy now** → reserve → redirect to `/checkout/pay` → **Razorpay Standard Checkout** (single payment UI) → `/checkout/thanks` → ERP sale bill (official ERP PDF via BFF `/api/site/invoice/{id}`). Marketing CMS (hero/offers) still uses Neon.
+Jewellery catalog pages load **live available inventory** from Octis ERP via the Anagha BFF (`/api/catalog`). Checkout uses **Buy now** → reserve → redirect to `/checkout/pay` → **Razorpay Standard Checkout** (single payment UI) → `/checkout/thanks` → ERP sale bill (official ERP PDF via BFF `/api/site/invoice/{id}`). Marketing CMS (hero/offers) uses Postgres. On Cloud Run, uploaded images go to Cloud Storage.
 
 **Razorpay sandbox:** use [test cards](https://razorpay.com/docs/payments/payments/test-card-upi-details/) (e.g. `4111 1111 1111 1111`). Live keys (`rzp_live_…`) come later after account activation.
 

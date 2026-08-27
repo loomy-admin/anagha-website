@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, Variants } from 'framer-motion';
 import Link from 'next/link';
 import { CURATED_STYLES_CARDS } from '@/lib/data';
+import { cmsSrc } from '@/lib/cmsAsset';
 
 interface Props {
   liveSlots?: (string | null)[];
@@ -14,7 +15,7 @@ export default function CuratedStyles({ liveSlots, liveTitles }: Props) {
   const [index0, setIndex0] = useState(0);
   const [index1, setIndex1] = useState(0);
   const [index2, setIndex2] = useState(0);
-  const [overrides, setOverrides] = useState<(string | null)[]>(liveSlots ? liveSlots.map(f => f ? `/uploads/${f}` : null) : new Array(12).fill(null));
+  const [overrides, setOverrides] = useState<(string | null)[]>(liveSlots ? liveSlots.map(f => f ? cmsSrc(f) : null) : new Array(12).fill(null));
   const [titles,    setTitles]    = useState<(string | null)[]>(liveTitles || []);
 
   useEffect(() => {
@@ -22,7 +23,7 @@ export default function CuratedStyles({ liveSlots, liveTitles }: Props) {
       fetch('/api/upload/curated')
         .then(r => r.json())
         .then(d => {
-          if (d.slots) setOverrides(d.slots.map((file: string | null) => file ? `/uploads/${file}` : null));
+          if (d.slots) setOverrides(d.slots.map((file: string | null) => file ? cmsSrc(file) : null));
           if (d.titles) setTitles(d.titles);
         })
         .catch(() => {});

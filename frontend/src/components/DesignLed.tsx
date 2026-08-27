@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, Variants } from 'framer-motion';
 import Link from 'next/link';
 import { DESIGN_LED_ITEMS } from '@/lib/data';
+import { cmsSrc } from '@/lib/cmsAsset';
 
 interface Props {
   liveImages?: (string | null)[];
@@ -11,7 +12,7 @@ interface Props {
 }
 
 export default function DesignLed({ liveImages, liveLabels }: Props) {
-  const [overrides, setOverrides] = useState<(string | null)[]>(liveImages ? liveImages.map(f => f ? `/uploads/${f}` : null) : new Array(6).fill(null));
+  const [overrides, setOverrides] = useState<(string | null)[]>(liveImages ? liveImages.map(f => f ? cmsSrc(f) : null) : new Array(6).fill(null));
   const [labelOverrides, setLabelOverrides] = useState<(string | null)[]>(liveLabels || new Array(3).fill(null));
 
   useEffect(() => {
@@ -19,7 +20,7 @@ export default function DesignLed({ liveImages, liveLabels }: Props) {
       fetch('/api/upload/design-led')
         .then(r => r.json())
         .then(d => {
-          if (d.images) setOverrides(d.images.map((file: string | null) => file ? `/uploads/${file}` : null));
+          if (d.images) setOverrides(d.images.map((file: string | null) => file ? cmsSrc(file) : null));
           if (d.labels) setLabelOverrides(d.labels);
         })
         .catch(() => {});

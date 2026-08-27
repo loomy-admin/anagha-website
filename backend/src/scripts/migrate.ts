@@ -1,13 +1,11 @@
 import 'dotenv/config';
-import { neon } from '@neondatabase/serverless';
 import bcrypt from 'bcryptjs';
+import { pool, sql } from '../db/index.js';
 
 async function main() {
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL is required');
   }
-
-  const sql = neon(process.env.DATABASE_URL);
 
   await sql`
     CREATE TABLE IF NOT EXISTS site_content (
@@ -109,7 +107,7 @@ async function main() {
   await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS razorpay_order_id TEXT`;
   await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS razorpay_payment_id TEXT`;
 
-  // Migrate legacy PhonePe columns → Razorpay (idempotent; Neon-safe single statements)
+  // Migrate legacy PhonePe columns → Razorpay (idempotent single statements)
   const legacyCols = await sql`
     SELECT column_name
     FROM information_schema.columns
@@ -185,6 +183,7 @@ async function main() {
   await sql`CREATE INDEX IF NOT EXISTS catalog_status_idx ON cached_catalog_items (status)`;
 
   console.log('Migration complete.');
+  await pool.end();
 }
 
 main().catch((err) => {

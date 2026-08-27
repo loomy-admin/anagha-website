@@ -1,4 +1,4 @@
-import { neon } from '@neondatabase/serverless';
+import { sql } from '../db/index.js';
 import { getContent, setContent } from './content.js';
 import { getErpVisibility, setErpVisibility } from './erpVisibility.js';
 import { slugifyName } from './catalogStore.js';
@@ -14,13 +14,6 @@ export type ExtraTaxonomy = {
   purities: string[];
 };
 export type TaxonomyKind = 'group' | 'type' | 'article' | 'metal' | 'purity';
-
-function dbSql() {
-  if (!process.env.DATABASE_URL) {
-    throw Object.assign(new Error('DATABASE_URL is not set'), { status: 503 });
-  }
-  return neon(process.env.DATABASE_URL);
-}
 
 function uniqueNamed(items: ExtraGroup[]) {
   const seen = new Set<string>();
@@ -162,7 +155,6 @@ export async function renameTaxonomy(kind: TaxonomyKind, fromSlug: string, name:
     throw Object.assign(new Error('Name and current slug are required'), { status: 400 });
   }
 
-  const sql = dbSql();
   if (kind === 'group') {
     await sql`
       UPDATE cached_catalog_items
@@ -246,7 +238,6 @@ export async function deleteCatalogGroup(fromSlug: string) {
     throw Object.assign(new Error('Category is required'), { status: 400 });
   }
 
-  const sql = dbSql();
   const deletedRows = await sql`
     DELETE FROM cached_catalog_items
     WHERE group_slug = ${from}
@@ -292,7 +283,6 @@ export async function deleteTaxonomyValue(kind: Exclude<TaxonomyKind, 'group'>, 
   if (!from) {
     throw Object.assign(new Error('Current value is required'), { status: 400 });
   }
-  const sql = dbSql();
   const extra = await getExtraTaxonomy();
   if (kind === 'type') {
     await sql`
@@ -344,7 +334,6 @@ export async function moveItemsToGroup(tags: string[], groupName: string) {
   if (!unique.length || !trimmed || !toSlug) {
     throw Object.assign(new Error('tags and group are required'), { status: 400 });
   }
-  const sql = dbSql();
   await sql`
     UPDATE cached_catalog_items
     SET

@@ -10,23 +10,17 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.bin';
-    const base = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
-    cb(null, `${base}_${Date.now()}${ext}`);
-  },
-});
-
 export const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 },
 });
 
-export function safeUnlink(filename: string | null | undefined) {
-  if (!filename) return;
-  const name = filename.replace(/^\/uploads\//, '');
+export function safeUnlink(stored: string | null | undefined) {
+  if (!stored) return;
+  const value = stored.trim();
+  if (!value) return;
+  if (/^https?:\/\//i.test(value) || value.startsWith('//')) return;
+  const name = value.replace(/^\/uploads\//, '');
   const full = path.join(UPLOADS_DIR, name);
   try {
     if (fs.existsSync(full)) fs.unlinkSync(full);
@@ -36,5 +30,5 @@ export function safeUnlink(filename: string | null | undefined) {
 }
 
 export function publicUploadPath(filename: string) {
-  return `/uploads/${filename}`;
+  return `/uploads/${filename.replace(/^\/+/, '')}`;
 }

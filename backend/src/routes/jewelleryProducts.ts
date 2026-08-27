@@ -1,11 +1,10 @@
 import { Router } from 'express';
-import path from 'node:path';
-import fs from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
 import { products } from '../db/schema.js';
-import { upload, UPLOADS_DIR, safeUnlink, publicUploadPath } from '../lib/upload.js';
+import { upload, safeUnlink } from '../lib/upload.js';
+import { storeCmsUpload } from '../lib/objectStorage.js';
 
 const router = Router();
 
@@ -54,9 +53,7 @@ router.post('/', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'Missing fields' });
     }
 
-    const ext = path.extname(req.file.originalname) || '.png';
-    const filename = `product_${Date.now()}${ext}`;
-    fs.renameSync(req.file.path, path.join(UPLOADS_DIR, filename));
+    const stored = await storeCmsUpload(req.file, `product_${Date.now()}`);
 
     const id = uuidv4();
     const [row] = await db
@@ -67,7 +64,7 @@ router.post('/', upload.single('file'), async (req, res) => {
         category,
         price,
         originalPrice,
-        image: publicUploadPath(filename),
+        image: stored.url,
       })
       .returning();
 
@@ -97,11 +94,9 @@ router.patch('/', upload.single('file'), async (req, res) => {
     if (req.body.offer) updates.offer = req.body.offer;
 
     if (req.file) {
-      if (product.image?.startsWith('/uploads/')) safeUnlink(product.image);
-      const ext = path.extname(req.file.originalname) || '.png';
-      const filename = `product_${Date.now()}${ext}`;
-      fs.renameSync(req.file.path, path.join(UPLOADS_DIR, filename));
-      updates.image = publicUploadPath(filename);
+      if (product.image) safeUnlink(product.image);
+      const stored = await storeCmsUpload(req.file, `product_${Date.now()}`);
+      updates.image = stored.url;
     }
 
     const [row] = await db
@@ -123,7 +118,7 @@ router.delete('/', async (req, res) => {
     if (!id) return res.status(400).json({ error: 'ID is required' });
 
     const existing = await db.select().from(products).where(eq(products.id, id)).limit(1);
-    if (existing[0]?.image?.startsWith('/uploads/')) safeUnlink(existing[0].image);
+    if (existing[0]?.image) safeUnlink(existing[0].image);
 
     await db.delete(products).where(eq(products.id, id));
     res.json({ success: true });

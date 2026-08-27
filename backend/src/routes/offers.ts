@@ -1,8 +1,7 @@
 import { Router } from 'express';
-import path from 'node:path';
-import fs from 'node:fs';
 import { getContent, setContent } from '../lib/content.js';
-import { upload, UPLOADS_DIR, safeUnlink } from '../lib/upload.js';
+import { upload, safeUnlink } from '../lib/upload.js';
+import { storeCmsUpload } from '../lib/objectStorage.js';
 
 const router = Router();
 
@@ -23,12 +22,10 @@ router.post('/', upload.single('file'), async (req, res) => {
 
     if (offers[index]) safeUnlink(offers[index]);
 
-    const ext = path.extname(req.file.originalname) || '.png';
-    const filename = `offer_${index}${ext}`;
-    fs.renameSync(req.file.path, path.join(UPLOADS_DIR, filename));
-    offers[index] = filename;
+    const stored = await storeCmsUpload(req.file, `offer_${index}`);
+    offers[index] = stored.url;
     await setContent('offers', offers);
-    res.json({ success: true, filename });
+    res.json({ success: true, filename: stored.filename, url: stored.url });
   } catch (err) {
     console.error('[offers] POST', err);
     res.status(500).json({ error: 'Upload failed' });

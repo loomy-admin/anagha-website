@@ -114,7 +114,7 @@ app.use('/api/upload/catalog/taxonomy', catalogTaxonomyRoutes);
 app.use('/api/upload/catalog/items', catalogItemsRoutes);
 app.use('/api/upload/catalog', catalogImportRoutes);
 
-// Website catalog (Neon). ERP is used only via admin Re-import.
+// Website catalog (Cloud SQL / local Postgres). ERP is used only via admin Re-import.
 app.use('/api/catalog', catalogRoutes);
 // Customer email/password auth (website shoppers)
 app.use('/api/auth', authRoutes);

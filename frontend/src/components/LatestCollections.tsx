@@ -1,6 +1,7 @@
 'use client';
 
 import { motion, Variants } from 'framer-motion';
+import { cmsSrc } from '@/lib/cmsAsset';
 
 const DEFAULTS = [
   '/images/collections/resized_image.png',
@@ -14,7 +15,7 @@ interface Props {
 }
 
 export default function LatestCollections({ live, btnLink = '#' }: Props) {
-  const imgs = DEFAULTS.map((def, i) => (live[i] ? `/uploads/${live[i]}` : def));
+  const imgs = DEFAULTS.map((def, i) => (live[i] ? cmsSrc(live[i]) : def));
 
   const CARD = 'w-full aspect-[4/3] rounded-2xl overflow-hidden shadow-sm shrink-0';
 

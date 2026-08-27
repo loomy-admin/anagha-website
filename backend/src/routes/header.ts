@@ -1,8 +1,7 @@
 import { Router } from 'express';
-import path from 'node:path';
-import fs from 'node:fs';
 import { getContent, setContent } from '../lib/content.js';
-import { upload, UPLOADS_DIR, publicUploadPath } from '../lib/upload.js';
+import { upload } from '../lib/upload.js';
+import { storeCmsUpload } from '../lib/objectStorage.js';
 
 const router = Router();
 
@@ -162,19 +161,15 @@ router.post(
         .toLowerCase() || 'tab';
       if (!req.file) return res.status(400).json({ error: 'No file' });
 
-      const ext = path.extname(req.file.originalname) || `.${req.file.mimetype.split('/')[1] || 'png'}`;
-      const filename = `header_callout_${slug.replace(/[^a-z0-9_-]/g, '_')}_${Date.now()}${ext}`;
-      fs.renameSync(req.file.path, path.join(UPLOADS_DIR, filename));
-      return res.json({ success: true, image: publicUploadPath(filename) });
+      const stored = await storeCmsUpload(req.file, `header_callout_${slug.replace(/[^a-z0-9_-]/g, '_')}_${Date.now()}`);
+      return res.json({ success: true, filename: stored.filename, image: stored.url, url: stored.url });
     }
 
     if (action === 'upload-logo' || action === 'upload-logo-icon') {
       if (!req.file) return res.status(400).json({ error: 'No file' });
-      const ext = path.extname(req.file.originalname) || `.${req.file.mimetype.split('/')[1] || 'png'}`;
       const prefix = action === 'upload-logo' ? 'brand_logo' : 'logo_icon';
-      const filename = `${prefix}_${Date.now()}${ext}`;
-      fs.renameSync(req.file.path, path.join(UPLOADS_DIR, filename));
-      const url = publicUploadPath(filename);
+      const stored = await storeCmsUpload(req.file, `${prefix}_${Date.now()}`);
+      const url = stored.url;
       
       const current = await getContent<HeaderContent>('header', { selectedGroups: [] });
       if (action === 'upload-logo') current.logoUrl = url;
