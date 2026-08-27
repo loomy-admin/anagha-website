@@ -69,7 +69,7 @@ export const websiteCustomers = pgTable('website_customers', {
     .defaultNow(),
 });
 
-/** Website checkout sessions (ERP customer created only after paid). */
+/** Website checkout sessions (Razorpay). erp_bill_* store website invoice ids. */
 export const checkoutSessions = pgTable('checkout_sessions', {
   id: uuid('id').primaryKey().defaultRandom(),
   status: text('status').notNull().default('pending'),
@@ -91,6 +91,7 @@ export const checkoutSessions = pgTable('checkout_sessions', {
   shippingAmount: text('shipping_amount').default('0'),
   shippingMethodId: text('shipping_method_id'),
   shippingMethodName: text('shipping_method_name'),
+  shippingEta: text('shipping_eta'),
   courierName: text('courier_name'),
   trackingNumber: text('tracking_number'),
   trackingUrl: text('tracking_url'),
@@ -118,7 +119,10 @@ export const cachedCatalogItems = pgTable('cached_catalog_items', {
   displayPrice: real('display_price'),
   hasImage: boolean('has_image').default(false),
   erpCreatedAt: timestamp('erp_created_at', { withTimezone: true }),
-  data: jsonb('data').notNull(), // The full ERP JSON object
+  data: jsonb('data').notNull(), // Full item JSON (imported from ERP or created on website)
+  origin: text('origin').notNull().default('erp'),
+  status: text('status').notNull().default('available'),
+  soldAt: timestamp('sold_at', { withTimezone: true }),
   syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index('group_price_idx').on(t.groupSlug, t.displayPrice),
@@ -127,4 +131,5 @@ export const cachedCatalogItems = pgTable('cached_catalog_items', {
   index('group_date_idx').on(t.groupSlug, t.erpCreatedAt),
   index('type_date_idx').on(t.typeSlug, t.erpCreatedAt),
   index('article_date_idx').on(t.articleSlug, t.erpCreatedAt),
+  index('catalog_status_idx').on(t.status),
 ]);

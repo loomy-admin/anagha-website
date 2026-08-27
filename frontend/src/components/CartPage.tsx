@@ -11,11 +11,13 @@ import {
 } from '@/lib/checkout';
 import { addToWishlist } from '@/lib/wishlist';
 import { formatDisplayPrice } from '@/lib/erpCatalog';
+import { quoteCartOffer, type OfferQuote } from '@/lib/cartOffers';
 
 export default function CartPage() {
   const router = useRouter();
   const [items, setItems] = useState<CheckoutCartItem[]>([]);
   const [ready, setReady] = useState(false);
+  const [quote, setQuote] = useState<OfferQuote | null>(null);
 
   useEffect(() => {
     function sync() {
@@ -31,7 +33,21 @@ export default function CartPage() {
     };
   }, []);
 
-  const total = useMemo(
+  useEffect(() => {
+    let cancelled = false;
+    if (!items.length) {
+      setQuote(null);
+      return;
+    }
+    quoteCartOffer(items.map((item) => item.tag_number)).then((next) => {
+      if (!cancelled) setQuote(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [items]);
+
+  const subtotal = useMemo(
     () =>
       items.reduce((sum, item) => {
         const price = Number(item.display_price);
@@ -39,6 +55,9 @@ export default function CartPage() {
       }, 0),
     [items],
   );
+  const discount = quote?.discount || 0;
+  const total = quote ? quote.items_amount : subtotal;
+  const freeTags = new Set(quote?.applied?.free_tags || []);
 
   if (!ready) {
     return (
@@ -104,7 +123,16 @@ export default function CartPage() {
                 <p className="text-[11px] text-gray-400 uppercase">Tag {item.tag_number}</p>
                 <p className="text-sm font-medium text-[#222] leading-snug mt-1">{item.name}</p>
                 <p className="text-base font-bold text-[#222] mt-2">
-                  {formatDisplayPrice(item.display_price)}
+                  {freeTags.has(item.tag_number) ? (
+                    <span>
+                      <span className="line-through text-gray-400 font-medium mr-2">
+                        {formatDisplayPrice(item.display_price)}
+                      </span>
+                      Free
+                    </span>
+                  ) : (
+                    formatDisplayPrice(item.display_price)
+                  )}
                 </p>
                 <div className="flex items-center gap-4 mt-3">
                   <button
@@ -143,6 +171,18 @@ export default function CartPage() {
               <span className="text-gray-500">Items</span>
               <span className="font-medium">{items.length}</span>
             </div>
+            {discount > 0 ? (
+              <>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-gray-500">Subtotal</span>
+                  <span className="font-medium">{formatDisplayPrice(subtotal)}</span>
+                </div>
+                <div className="flex justify-between text-sm mb-2 text-[#00a699]">
+                  <span>{quote?.applied?.name || 'Offer'}</span>
+                  <span className="font-medium">-{formatDisplayPrice(discount)}</span>
+                </div>
+              </>
+            ) : null}
             <div className="flex justify-between text-base font-bold text-[#222] border-t border-gray-200 pt-3 mt-3 mb-6">
               <span>Total</span>
               <span>{formatDisplayPrice(total)}</span>

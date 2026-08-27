@@ -8,7 +8,7 @@ type Props = {
 };
 
 /**
- * Loads the official ERP bill PDF via BFF, then shows it in an iframe.
+ * Loads the website sales-invoice PDF via BFF, then shows it in an iframe.
  * Uses fetch (not iframe onLoad) so the spinner clears reliably in new tabs.
  */
 export default function BillEmbed({ billId, className = '' }: Props) {

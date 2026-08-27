@@ -1,11 +1,9 @@
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
-import BillEmbed from '@/components/BillEmbed';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Bill | Anagha',
+  title: 'Invoice | Anagha',
   robots: { index: false, follow: false },
 };
 
@@ -16,18 +14,6 @@ export default async function BillPage({
 }) {
   const { billId } = await params;
   const id = decodeURIComponent(billId || '').trim();
-
-  return (
-    <>
-      <Header />
-      <main className="w-full bg-white min-h-[70vh]">
-        {id ? (
-          <div className="w-full h-[calc(100vh-12rem)] min-h-[70vh]">
-            <BillEmbed billId={id} />
-          </div>
-        ) : null}
-      </main>
-      <Footer />
-    </>
-  );
+  if (!id) return null;
+  redirect(`/api/site/invoice/${encodeURIComponent(id)}`);
 }

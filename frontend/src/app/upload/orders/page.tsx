@@ -6,7 +6,7 @@ import Header from '@/components/Header';
 import { formatDisplayPrice } from '@/lib/erpCatalog';
 import { formatOrderAddressLines } from '@/lib/orderAddress';
 import { fetchAdminOrders, updateAdminOrder } from '@/lib/shipping';
-import type { CheckoutSession } from '@/lib/checkout';
+import { orderLineItems, publicOrderId, type CheckoutSession } from '@/lib/checkout';
 
 const STATUSES = [
   { id: 'paid', label: 'Paid' },
@@ -135,6 +135,8 @@ export default function AdminOrdersPage() {
                 tracking_number: '',
                 tracking_url: '',
               };
+              const lines = orderLineItems(order);
+              const orderId = publicOrderId(order);
               return (
                 <li key={order.id} className="bg-white border border-gray-100 rounded-2xl p-5 sm:p-6">
                   <div className="flex flex-wrap justify-between gap-3 mb-4">
@@ -143,6 +145,9 @@ export default function AdminOrdersPage() {
                         {formatDate(order.created_at)}
                       </p>
                       <p className="font-domine text-lg text-navy mt-1">
+                        Order {orderId}
+                      </p>
+                      <p className="text-sm text-gray-700 mt-1">
                         {order.customer_name || 'Customer'}
                       </p>
                       <p className="text-sm text-gray-500">
@@ -152,9 +157,20 @@ export default function AdminOrdersPage() {
                     <p className="text-lg font-bold">{formatDisplayPrice(order.amount)}</p>
                   </div>
 
-                  <p className="text-sm text-[#222] mb-2">
-                    {(order.item_names || []).join(', ') || `Tags: ${(order.tag_numbers || [order.tag_number]).join(', ')}`}
-                  </p>
+                  <ul className="text-sm text-[#222] mb-2 space-y-1">
+                    {lines.length ? (
+                      lines.map((item) => (
+                        <li key={`${order.id}-${item.tag_number}`}>
+                          {item.name}
+                          {item.tag_number ? (
+                            <span className="text-gray-500"> · Tag {item.tag_number}</span>
+                          ) : null}
+                        </li>
+                      ))
+                    ) : (
+                      <li>Tags: {(order.tag_numbers || [order.tag_number]).join(', ')}</li>
+                    )}
+                  </ul>
                   <div className="text-sm text-[#222] mb-4 bg-[#fafafa] rounded-xl p-3">
                     <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-1">
                       Delivery address
@@ -167,9 +183,10 @@ export default function AdminOrdersPage() {
                       <p className="text-gray-400">No delivery address on this order.</p>
                     )}
                   </div>
-                  {order.shipping_method_name ? (
+                  {order.shipping_method_name || order.shipping_eta ? (
                     <p className="text-sm text-gray-500 mb-4">
-                      {order.shipping_method_name}
+                      {order.shipping_method_name || 'Online delivery'}
+                      {order.shipping_eta ? ` · ${order.shipping_eta}` : ''}
                       {order.shipping_amount ? ` · ${formatDisplayPrice(order.shipping_amount)}` : ''}
                     </p>
                   ) : null}

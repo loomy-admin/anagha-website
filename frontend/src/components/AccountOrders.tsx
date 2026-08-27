@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { fetchMe, type WebsiteCustomer } from '@/lib/auth';
-import { fetchMyOrders, type CheckoutSession } from '@/lib/checkout';
+import { fetchMyOrders, orderLineItems, publicOrderId, type CheckoutSession } from '@/lib/checkout';
 import { formatDisplayPrice } from '@/lib/erpCatalog';
 import { formatOrderAddressLines } from '@/lib/orderAddress';
 import BillFrame from '@/components/BillFrame';
@@ -21,7 +21,7 @@ function formatDate(value?: string | null) {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  paid: 'Paid — preparing',
+  paid: 'Paid — preparing for delivery',
   packed: 'Packed',
   shipped: 'Shipped',
   delivered: 'Delivered',
@@ -112,7 +112,8 @@ export default function AccountOrders() {
       ) : (
         <ul className="space-y-4">
           {orders.map((order) => {
-            const names = (order.item_names || []).filter(Boolean);
+            const lines = orderLineItems(order);
+            const orderId = publicOrderId(order);
             const fromOrder = formatOrderAddressLines(order.shipping_address);
             const deliveryLines = fromOrder.length
               ? fromOrder
@@ -127,6 +128,7 @@ export default function AccountOrders() {
                     <p className={`text-[11px] uppercase tracking-widest font-bold ${STATUS_CLASS[order.status] || 'text-gray-600'}`}>
                       {STATUS_LABEL[order.status] || order.status}
                     </p>
+                    <p className="text-sm font-semibold text-[#032C5E] mt-1">Order {orderId}</p>
                     <p className="text-sm text-gray-500 mt-1">{formatDate(order.created_at)}</p>
                   </div>
                   <p className="text-lg font-bold text-[#222]">
@@ -134,11 +136,14 @@ export default function AccountOrders() {
                   </p>
                 </div>
                 <div className="text-sm text-[#222]">
-                  {names.length ? (
+                  {lines.length ? (
                     <ul className="space-y-1">
-                      {names.map((name, idx) => (
-                        <li key={`${order.id}-${idx}`} className="font-medium">
-                          {name}
+                      {lines.map((item) => (
+                        <li key={`${order.id}-${item.tag_number}`} className="font-medium">
+                          {item.name}
+                          {item.tag_number ? (
+                            <span className="text-gray-500 font-normal"> · Tag {item.tag_number}</span>
+                          ) : null}
                         </li>
                       ))}
                     </ul>
@@ -146,9 +151,13 @@ export default function AccountOrders() {
                     <span className="text-gray-500">Jewellery purchase</span>
                   )}
                 </div>
-                {order.shipping_method_name ? (
+                {order.shipping_method_name || order.shipping_eta ? (
                   <p className="text-sm mt-2 text-gray-500">
-                    Shipping: <span className="font-medium text-[#222]">{order.shipping_method_name}</span>
+                    Delivery:{' '}
+                    <span className="font-medium text-[#222]">
+                      {order.shipping_method_name || 'Online'}
+                      {order.shipping_eta ? ` · ${order.shipping_eta}` : ''}
+                    </span>
                     {order.shipping_amount ? ` · ${formatDisplayPrice(order.shipping_amount)}` : ''}
                   </p>
                 ) : null}
@@ -191,7 +200,7 @@ export default function AccountOrders() {
                     <span className="font-medium">{order.erp_bill_number}</span>
                   </div>
                 ) : null}
-                {order.erp_bill_id ? (
+                {order.erp_bill_id || order.id ? (
                   <div className="mt-4">
                     <button
                       type="button"
@@ -205,7 +214,7 @@ export default function AccountOrders() {
                     {openBillId === order.id ? (
                       <div className="mt-3">
                         <BillFrame
-                          billId={order.erp_bill_id}
+                          billId={order.erp_bill_id || order.id}
                           billNumber={order.erp_bill_number}
                           size="compact"
                         />

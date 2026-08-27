@@ -3,9 +3,9 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
 import { checkoutSessions } from '../db/schema.js';
-import { reserveOnErp, releaseOnErp, completeOnErp } from '../lib/erpWebstore.js';
+import { reserveWebsiteTags, releaseWebsiteTags, markWebsiteTagsSold } from '../lib/websiteInventory.js';
 import { requireCustomer, requireAdmin } from '../lib/customerAuth.js';
-import { resolveShippingMethod } from './shippingConfig.js';
+import { resolveShippingMethod, getShippingConfig } from './shippingConfig.js';
 import {
   createRazorpayOrder,
   verifyRazorpayPaymentSignature,
@@ -63,7 +63,7 @@ function namesFromLines(items: unknown): string[] {
         product_name?: unknown;
       };
       return String(
-        row.description || row.name || row.article || row.product_name || '',
+        row.name || row.product_name || row.article || row.description || '',
       ).trim();
     })
     .filter(Boolean);
@@ -97,7 +97,35 @@ function itemNamesFromPayload(payload: unknown): string[] {
 function billUrlFor(billId: string | null | undefined) {
   const id = String(billId || '').trim();
   if (!id) return null;
-  return `/bill/${encodeURIComponent(id)}`;
+  return `/api/site/invoice/${encodeURIComponent(id)}`;
+}
+
+function orderIdFor(row: typeof checkoutSessions.$inferSelect) {
+  return String(row.erpBillNumber || `AJ-${String(row.id).slice(0, 8).toUpperCase()}`);
+}
+
+function publicLineItems(row: typeof checkoutSessions.$inferSelect) {
+  const tagNumbers = parseTagNumbers(row.tagNumber);
+  const names = itemNamesFromPayload(row.paymentPayload);
+  const payload =
+    row.paymentPayload && typeof row.paymentPayload === 'object'
+      ? (row.paymentPayload as { items?: unknown })
+      : {};
+  const fromCart = Array.isArray(payload.items) ? payload.items : [];
+  if (fromCart.length) {
+    return fromCart.map((line, idx) => {
+      const item = line && typeof line === 'object' ? (line as Record<string, unknown>) : {};
+      const tag = String(item.tag_number || tagNumbers[idx] || '').trim().toUpperCase();
+      const name = String(
+        item.name || item.product_name || item.article || item.description || names[idx] || 'Jewellery',
+      ).trim();
+      return { name, tag_number: tag };
+    });
+  }
+  return tagNumbers.map((tag, idx) => ({
+    name: names[idx] || 'Jewellery',
+    tag_number: tag,
+  }));
 }
 
 const FULFILLMENT_STATUSES = ['paid', 'packed', 'shipped', 'delivered'] as const;
@@ -119,27 +147,32 @@ function asAddressObject(raw: unknown): Record<string, unknown> {
 
 function publicSession(row: typeof checkoutSessions.$inferSelect) {
   const tagNumbers = parseTagNumbers(row.tagNumber);
-  const itemNames = itemNamesFromPayload(row.paymentPayload);
+  const items = publicLineItems(row);
+  const itemNames = items.map((item) => item.name).filter(Boolean);
   const itemsAmount = Number(row.itemsAmount ?? row.amount);
   const shippingAmount = Number(row.shippingAmount || 0);
+  const orderId = orderIdFor(row);
   return {
     id: row.id,
+    order_id: orderId,
     status: row.status,
     tag_number: tagNumbers[0] || row.tagNumber,
     tag_numbers: tagNumbers,
     item_names: itemNames,
+    items,
     amount: Number(row.amount),
     items_amount: Number.isFinite(itemsAmount) ? itemsAmount : Number(row.amount),
     shipping_amount: Number.isFinite(shippingAmount) ? shippingAmount : 0,
     shipping_method_id: row.shippingMethodId,
     shipping_method_name: row.shippingMethodName,
+    shipping_eta: row.shippingEta || null,
     currency: row.currency,
     customer_name: row.customerName,
     customer_mobile: row.customerMobile,
     customer_email: row.customerEmail,
-    erp_bill_id: row.erpBillId,
-    erp_bill_number: row.erpBillNumber,
-    bill_url: billUrlFor(row.erpBillId),
+    erp_bill_id: row.erpBillId || row.id,
+    erp_bill_number: orderId,
+    bill_url: billUrlFor(row.erpBillId || row.id),
     shipping_address: asAddressObject(row.shippingAddress),
     courier_name: row.courierName,
     tracking_number: row.trackingNumber,
@@ -151,6 +184,20 @@ function publicSession(row: typeof checkoutSessions.$inferSelect) {
     created_at: row.createdAt,
     payment_provider: 'razorpay' as const,
   };
+}
+
+async function withDeliveryEta(row: typeof checkoutSessions.$inferSelect) {
+  const pub = publicSession(row);
+  if (pub.shipping_eta) return pub;
+  const methodId = String(row.shippingMethodId || '').trim();
+  if (!methodId) return pub;
+  try {
+    const { methods } = await getShippingConfig();
+    const match = methods.find((m) => m.id === methodId);
+    return { ...pub, shipping_eta: match?.eta || null };
+  } catch {
+    return pub;
+  }
 }
 
 async function finalizePaidSession(sessionId: string, paymentRef: string) {
@@ -175,16 +222,14 @@ async function finalizePaidSession(sessionId: string, paymentRef: string) {
     throw Object.assign(new Error('Customer details missing on session'), { status: 400 });
   }
 
-  const complete = await completeOnErp({
-    checkoutSessionId: session.id,
-    paymentRef,
-    paidAmount: Number(session.itemsAmount || session.amount),
-    customer: {
-      name: session.customerName,
-      mobile: session.customerMobile,
-      email: session.customerEmail || undefined,
+  const complete = {
+    bill: {
+      id: session.id,
+      bill_number: session.erpBillNumber || `AJ-${String(session.id).slice(0, 8).toUpperCase()}`,
     },
-  });
+  };
+
+  await markWebsiteTagsSold(parseTagNumbers(session.tagNumber));
 
   const prevPayload =
     session.paymentPayload && typeof session.paymentPayload === 'object'
@@ -200,8 +245,8 @@ async function finalizePaidSession(sessionId: string, paymentRef: string) {
     .set({
       status: 'paid',
       razorpayPaymentId: paymentRef,
-      erpBillId: complete.bill?.id || null,
-      erpBillNumber: complete.bill?.bill_number || null,
+      erpBillId: complete.bill.id,
+      erpBillNumber: complete.bill.bill_number,
       paymentPayload: {
         ...prevPayload,
         items: cartItems.length ? cartItems : billItems,
@@ -217,7 +262,7 @@ async function finalizePaidSession(sessionId: string, paymentRef: string) {
   return updated;
 }
 
-/** POST /api/checkout/session — reserve ERP item(s) + Razorpay order (auth required). */
+/** POST /api/checkout/session — reserve website catalog tags + Razorpay order (auth required). */
 router.post('/session', requireCustomer, async (req: Request, res: Response) => {
   try {
     const customer = req.customer!;
@@ -244,14 +289,11 @@ router.post('/session', requireCustomer, async (req: Request, res: Response) => 
     const sessionId = uuidv4();
     const receipt = `ANAGHA-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-    const reserved = await reserveOnErp({
-      checkoutSessionId: sessionId,
-      tags: uniqueTags,
-    });
+    const reserved = await reserveWebsiteTags(uniqueTags);
 
     const itemsAmount = Number(reserved.total_amount);
-    if (!Number.isFinite(itemsAmount) || itemsAmount <= 0) {
-      await releaseOnErp(sessionId).catch(() => undefined);
+    if (!Number.isFinite(itemsAmount) || itemsAmount < 0) {
+      await releaseWebsiteTags(uniqueTags).catch(() => undefined);
       return res.status(400).json({ error: 'Reserved item has invalid amount' });
     }
 
@@ -259,11 +301,15 @@ router.post('/session', requireCustomer, async (req: Request, res: Response) => 
     try {
       shipping = await resolveShippingMethod(req.body.shipping_method_id);
     } catch (shipErr) {
-      await releaseOnErp(sessionId).catch(() => undefined);
+      await releaseWebsiteTags(uniqueTags).catch(() => undefined);
       throw shipErr;
     }
     const shippingAmount = Number(shipping.charge) || 0;
     const amount = itemsAmount + shippingAmount;
+    if (!Number.isFinite(amount) || amount < 1) {
+      await releaseWebsiteTags(uniqueTags).catch(() => undefined);
+      return res.status(400).json({ error: 'Order total must be at least ₹1 after offers' });
+    }
 
     const selectedAddress = asAddressObject(
       req.body.shippingAddress || customer.shippingAddress,
@@ -286,13 +332,21 @@ router.post('/session', requireCustomer, async (req: Request, res: Response) => 
         shippingAmount: String(shippingAmount),
         shippingMethodId: shipping.id,
         shippingMethodName: shipping.name,
+        shippingEta: shipping.eta || null,
         currency: 'INR',
         websiteCustomerId: customer.id,
         customerName: name,
         customerMobile: mobile,
         customerEmail: email || null,
         shippingAddress: sql`${addressJson}::jsonb`,
-        paymentPayload: { cart_tags: uniqueTags, items: lines },
+        paymentPayload: {
+          cart_tags: uniqueTags,
+          items: lines,
+          offer: reserved.offer || null,
+          items_subtotal: reserved.items_subtotal,
+        },
+        erpBillId: sessionId,
+        erpBillNumber: `AJ-${sessionId.slice(0, 8).toUpperCase()}`,
         expiresAt,
       });
 
@@ -316,6 +370,8 @@ router.post('/session', requireCustomer, async (req: Request, res: Response) => 
         ...(rzp as unknown as Record<string, unknown>),
         cart_tags: uniqueTags,
         items: lines,
+        offer: reserved.offer || null,
+        items_subtotal: reserved.items_subtotal,
       };
 
       await db
@@ -336,12 +392,12 @@ router.post('/session', requireCustomer, async (req: Request, res: Response) => 
 
       res.json({
         data: {
-          session: publicSession(rows[0]),
+          session: await withDeliveryEta(rows[0]),
           payment,
         },
       });
     } catch (inner) {
-      await releaseOnErp(sessionId).catch(() => undefined);
+      await releaseWebsiteTags(uniqueTags).catch(() => undefined);
       await db
         .update(checkoutSessions)
         .set({ status: 'failed', updatedAt: new Date() })
@@ -370,7 +426,7 @@ router.get('/my-orders', requireCustomer, async (req: Request, res: Response) =>
       .orderBy(desc(checkoutSessions.createdAt))
       .limit(50);
 
-    res.json({ data: rows.map(publicSession) });
+    res.json({ data: await Promise.all(rows.map(withDeliveryEta)) });
   } catch (err) {
     handle(err, res);
   }
@@ -385,13 +441,13 @@ router.get('/session/:id', async (req: Request, res: Response) => {
       .where(eq(checkoutSessions.id, paramId(req)))
       .limit(1);
     if (!rows[0]) return res.status(404).json({ error: 'Session not found' });
-    res.json({ data: publicSession(rows[0]) });
+    res.json({ data: await withDeliveryEta(rows[0]) });
   } catch (err) {
     handle(err, res);
   }
 });
 
-/** POST /api/checkout/session/:id/cancel — release ERP hold */
+/** POST /api/checkout/session/:id/cancel — release website catalog hold */
 router.post('/session/:id/cancel', async (req: Request, res: Response) => {
   try {
     const rows = await db
@@ -405,7 +461,7 @@ router.post('/session/:id/cancel', async (req: Request, res: Response) => {
       return res.status(409).json({ error: 'Paid session cannot be cancelled' });
     }
 
-    await releaseOnErp(session.id).catch(() => undefined);
+    await releaseWebsiteTags(parseTagNumbers(session.tagNumber)).catch(() => undefined);
     const [updated] = await db
       .update(checkoutSessions)
       .set({ status: 'cancelled', updatedAt: new Date() })
@@ -438,7 +494,7 @@ router.post('/session/:id/confirm-razorpay', async (req: Request, res: Response)
     const session = rows[0];
     if (!session) return res.status(404).json({ error: 'Session not found' });
     if (session.status === 'paid') {
-      return res.json({ data: publicSession(session) });
+      return res.json({ data: await withDeliveryEta(session) });
     }
 
     if (!orderId || !paymentId || !signature) {
@@ -454,7 +510,7 @@ router.post('/session/:id/confirm-razorpay', async (req: Request, res: Response)
 
     const ok = verifyRazorpayPaymentSignature({ orderId, paymentId, signature });
     if (!ok) {
-      await releaseOnErp(session.id).catch(() => undefined);
+      await releaseWebsiteTags(parseTagNumbers(session.tagNumber)).catch(() => undefined);
       await db
         .update(checkoutSessions)
         .set({ status: 'failed', updatedAt: new Date() })
@@ -484,7 +540,7 @@ router.post('/session/:id/confirm-razorpay', async (req: Request, res: Response)
 
     if (wasUnpaid) queuePaidEmails(updated);
 
-    res.json({ data: publicSession(updated) });
+    res.json({ data: await withDeliveryEta(updated) });
   } catch (err) {
     handle(err, res);
   }
@@ -501,7 +557,7 @@ router.get('/session/:id/payment', async (req: Request, res: Response) => {
     const session = rows[0];
     if (!session) return res.status(404).json({ error: 'Session not found' });
     if (session.status === 'paid') {
-      return res.json({ data: { session: publicSession(session), payment: null } });
+      return res.json({ data: { session: await withDeliveryEta(session), payment: null } });
     }
     if (session.status !== 'pending' && session.status !== 'payment_initiated') {
       return res.status(409).json({ error: `Session is ${session.status}` });
@@ -510,7 +566,7 @@ router.get('/session/:id/payment', async (req: Request, res: Response) => {
       session.paymentPayload && typeof session.paymentPayload === 'object'
         ? session.paymentPayload
         : null;
-    res.json({ data: { session: publicSession(session), payment } });
+    res.json({ data: { session: await withDeliveryEta(session), payment } });
   } catch (err) {
     handle(err, res);
   }
@@ -564,7 +620,7 @@ router.get('/admin/orders', requireAdmin, async (_req: Request, res: Response) =
       .where(inArray(checkoutSessions.status, [...FULFILLMENT_STATUSES]))
       .orderBy(desc(checkoutSessions.createdAt))
       .limit(200);
-    res.json({ data: rows.map(publicSession) });
+    res.json({ data: await Promise.all(rows.map(withDeliveryEta)) });
   } catch (err) {
     handle(err, res);
   }
@@ -628,7 +684,7 @@ router.patch('/admin/orders/:id', requireAdmin, async (req: Request, res: Respon
       trackingUrl !== session.trackingUrl;
     if (statusChanged || trackingChanged) queueTrackingEmail(updated);
 
-    res.json({ data: publicSession(updated) });
+    res.json({ data: await withDeliveryEta(updated) });
   } catch (err) {
     handle(err, res);
   }

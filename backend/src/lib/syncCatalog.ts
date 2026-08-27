@@ -2,26 +2,77 @@ import { db } from '../db/index.js';
 import { cachedCatalogItems } from '../db/schema.js';
 import { fetchErpPublic } from './erpCatalog.js';
 import { applyWebsiteDescription, getAllWebsiteItemMeta } from './websiteItemMeta.js';
-import { getErpVisibility } from './erpVisibility.js';
+import { relocateItemMedia } from './copyErpImages.js';
+import { gcsConfigured } from './objectStorage.js';
 import { sql, inArray } from 'drizzle-orm';
 
 let isSyncing = false;
 
-export async function syncCatalogToDb(isFullReconciliation: boolean = false) {
+export type CatalogImportProgress = {
+  running: boolean;
+  ok: boolean | null;
+  message: string;
+  count: number;
+  total: number;
+  at: string | null;
+};
+
+let progress: CatalogImportProgress = {
+  running: false,
+  ok: null,
+  message: '',
+  count: 0,
+  total: 0,
+  at: null,
+};
+
+export function getCatalogImportProgress() {
+  return progress;
+}
+
+/** ERP public catalog includes stock `status`. Website sold/available is Neon-only. */
+function stripErpStockFields(item: Record<string, unknown>) {
+  const {
+    status: _status,
+    sold_at: _soldAt,
+    available: _available,
+    in_stock: _inStock,
+    stock_status: _stockStatus,
+    ...rest
+  } = item;
+  return rest;
+}
+
+function setProgress(partial: Partial<CatalogImportProgress>) {
+  progress = { ...progress, ...partial, at: new Date().toISOString() };
+}
+
+export function startCatalogImportFromErp() {
   if (isSyncing) {
-    console.log('[syncCatalog] Sync already in progress, aborting this run.');
-    return;
+    return { started: false as const, progress };
   }
   isSyncing = true;
-  console.log(`[syncCatalog] Starting background catalog sync (Full Reconciliation: ${isFullReconciliation})...`);
+  setProgress({
+    running: true,
+    ok: null,
+    message: 'Importing from ERP…',
+    count: 0,
+    total: 0,
+  });
+  void runCatalogImport();
+  return { started: true as const, progress };
+}
+
+async function runCatalogImport() {
+  console.log(
+    `[catalog-import] Starting ERP import (catalog JSON + image copy to ${gcsConfigured() ? 'GCS' : 'local /uploads'}; no runtime ERP after this)...`,
+  );
   try {
-    const visibility = await getErpVisibility();
     const metaMap = await getAllWebsiteItemMeta();
 
-    const seenTags = new Set<string>();
     let offset = 0;
     const limit = 200;
-    let total = 1; // dummy initial value to enter loop
+    let total = 1;
     let insertedOrUpdated = 0;
 
     const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -34,45 +85,78 @@ export async function syncCatalogToDb(isFullReconciliation: boolean = false) {
         break;
       }
 
-      total = res.data.total;
+      total = Number(res.data.total) || total;
 
-      const visibleItems = res.data.items.filter((item: any) => {
-        const groupSlug = String(item.group_slug || '').toLowerCase();
-        const tag = String(item.tag_number || '');
-        const hasCat = visibility.visibleCategories.length > 0;
-        const hasProd = visibility.visibleProducts.length > 0;
+      const processedItems = res.data.items
+        .filter((item: { tag_number?: string }) => Boolean(item.tag_number))
+        .map((item: Record<string, unknown>) =>
+          applyWebsiteDescription(stripErpStockFields(item), metaMap),
+        );
 
-        if (hasCat || hasProd) {
-          const catVisible = visibility.visibleCategories.includes(groupSlug);
-          const prodVisible = visibility.visibleProducts.includes(tag);
-          if (!catVisible && !prodVisible) return false;
+      const uniqueItems: Record<string, unknown>[] = [];
+      const seen = new Set<string>();
+      for (const item of processedItems) {
+        const tag = String(item.tag_number).trim().toUpperCase();
+        if (seen.has(tag)) continue;
+        seen.add(tag);
+        uniqueItems.push({ ...item, tag_number: tag });
+      }
+
+      const existingRows = uniqueItems.length
+        ? await db
+            .select()
+            .from(cachedCatalogItems)
+            .where(
+              inArray(
+                cachedCatalogItems.tagNumber,
+                uniqueItems.map((item) => String(item.tag_number)),
+              ),
+            )
+        : [];
+      const existingByTag = new Map(existingRows.map((row) => [row.tagNumber.toUpperCase(), row]));
+
+      const skipStatus = new Set(['sold', 'hidden', 'reserved']);
+      const uniqueRows = [];
+      for (const item of uniqueItems) {
+        const tag = String(item.tag_number);
+        const existing = existingByTag.get(tag);
+        if (existing && (existing.origin === 'website' || skipStatus.has(existing.status))) {
+          continue;
         }
-        return true;
-      });
+        const existingData =
+          existing?.data && typeof existing.data === 'object'
+            ? (existing.data as Record<string, unknown>)
+            : null;
+        const data = await relocateItemMedia(tag, item, existingData);
+        const image_url = typeof data.image_url === 'string' ? data.image_url : null;
+        uniqueRows.push({
+          tagNumber: tag,
+          id: item.id as string | null,
+          groupSlug: item.group_slug as string | null,
+          typeSlug: item.type_slug as string | null,
+          articleSlug: item.article_slug as string | null,
+          metalType: item.metal_type as string | null,
+          purity: item.purity as string | null,
+          displayPrice: item.display_price ? Number(item.display_price) : null,
+          hasImage: Boolean(
+            image_url ||
+              (Array.isArray(data.images) && data.images.length) ||
+              (Array.isArray(data.website_images) && data.website_images.length),
+          ),
+          erpCreatedAt: item.created_at ? new Date(String(item.created_at)) : null,
+          data,
+          origin: 'erp' as const,
+          status: 'available' as const,
+        });
+      }
 
-      const processedItems = visibleItems.map((item: any) => applyWebsiteDescription(item, metaMap));
-
-      const rows = processedItems.map((item: any) => ({
-        tagNumber: item.tag_number,
-        id: item.id,
-        groupSlug: item.group_slug,
-        typeSlug: item.type_slug,
-        articleSlug: item.article_slug,
-        metalType: item.metal_type,
-        purity: item.purity,
-        displayPrice: item.display_price ? Number(item.display_price) : null,
-        hasImage: !!(item.image_url || item.pos_image_url || (Array.isArray(item.website_images) && item.website_images.length > 0)),
-        erpCreatedAt: item.created_at ? new Date(item.created_at) : null,
-        data: item,
-      }));
-
-      // Track all visible tag numbers from this chunk
-      rows.forEach((r: any) => seenTags.add(r.tagNumber));
-
-      if (rows.length > 0) {
-        // UPSERT into Postgres. The WHERE clause prevents unnecessary disk writes if data hasn't changed.
-        await db.insert(cachedCatalogItems)
-          .values(rows)
+      const chunkSize = 40;
+      if (uniqueRows.length) {
+      for (let i = 0; i < uniqueRows.length; i += chunkSize) {
+        const chunk = uniqueRows.slice(i, i + chunkSize);
+        await db
+          .insert(cachedCatalogItems)
+          .values(chunk)
           .onConflictDoUpdate({
             target: cachedCatalogItems.tagNumber,
             set: {
@@ -83,40 +167,66 @@ export async function syncCatalogToDb(isFullReconciliation: boolean = false) {
               metalType: sql`EXCLUDED.metal_type`,
               purity: sql`EXCLUDED.purity`,
               displayPrice: sql`EXCLUDED.display_price`,
-              hasImage: sql`EXCLUDED.has_image`,
+              hasImage: sql`EXCLUDED.has_image OR COALESCE(cached_catalog_items.has_image, false)`,
               erpCreatedAt: sql`EXCLUDED.erp_created_at`,
               data: sql`EXCLUDED.data`,
+              origin: sql`EXCLUDED.origin`,
               syncedAt: sql`now()`,
             },
-            where: sql`EXCLUDED.data::text != cached_catalog_items.data::text`,
+            where: sql`cached_catalog_items.origin = 'erp' AND cached_catalog_items.status NOT IN ('sold', 'hidden', 'reserved')`,
           });
-        insertedOrUpdated += rows.length;
       }
+      }
+      insertedOrUpdated += uniqueRows.length;
 
       offset += res.data.items.length;
+      setProgress({
+        running: true,
+        count: insertedOrUpdated,
+        total,
+        message: `Importing ${Math.min(offset, total)} / ${total}`,
+      });
+      console.log(`[catalog-import] ${Math.min(offset, total)}/${total}`);
     }
 
-    // Cleanup: Delete items from DB that are no longer visible or deleted in ERP
-    // ONLY do this during a full reconciliation to avoid wiping DB if ERP glitch happens midway
-    if (isFullReconciliation && seenTags.size > 0 && offset >= total) {
-      const existingItems = await db.select({ tagNumber: cachedCatalogItems.tagNumber }).from(cachedCatalogItems);
-      const tagsToDelete = existingItems.filter(item => !seenTags.has(item.tagNumber)).map(item => item.tagNumber);
+    const [{ dbCount }] = await db
+      .select({ dbCount: sql<number>`count(*)::int` })
+      .from(cachedCatalogItems);
 
-      if (tagsToDelete.length > 0) {
-        // Chunk deletions to avoid param limits
-        const deleteChunkSize = 1000;
-        for (let i = 0; i < tagsToDelete.length; i += deleteChunkSize) {
-          const chunk = tagsToDelete.slice(i, i + deleteChunkSize);
-          await db.delete(cachedCatalogItems).where(inArray(cachedCatalogItems.tagNumber, chunk));
-        }
-        console.log(`[syncCatalog] Deleted ${tagsToDelete.length} stale/hidden items.`);
-      }
-    }
-
-    console.log(`[syncCatalog] Sync complete. Processed ${insertedOrUpdated} visible items in batches.`);
+    const message = `Imported ${insertedOrUpdated} from ERP. Website catalog now has ${dbCount} items.`;
+    setProgress({
+      running: false,
+      ok: true,
+      count: Number(dbCount) || insertedOrUpdated,
+      total,
+      message,
+    });
+    console.log(`[catalog-import] Complete. ERP pages ${insertedOrUpdated}/${total}. DB rows ${dbCount}.`);
   } catch (error) {
-    console.error('[syncCatalog] Sync failed:', error);
+    console.error('[catalog-import] Failed:', error);
+    setProgress({
+      running: false,
+      ok: false,
+      message: error instanceof Error ? error.message : 'Import failed',
+    });
   } finally {
     isSyncing = false;
   }
+}
+
+export async function importCatalogFromErp() {
+  const { started, progress: current } = startCatalogImportFromErp();
+  if (!started) {
+    return { ok: false, message: current.message || 'Import already in progress', count: current.count };
+  }
+  while (getCatalogImportProgress().running) {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+  }
+  const done = getCatalogImportProgress();
+  return { ok: Boolean(done.ok), message: done.message, count: done.count };
+}
+
+/** @deprecated Use importCatalogFromErp — kept so old admin token route still compiles until removed. */
+export async function syncCatalogToDb(_isFullReconciliation: boolean = false) {
+  return importCatalogFromErp();
 }

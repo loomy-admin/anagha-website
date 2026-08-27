@@ -15,7 +15,7 @@ export default function AdminHome() {
     },
     {
       title: 'Jewellery Page',
-      desc: 'Browse live ERP groups and available inventory tags (read-only; edit stock in Octis).',
+      desc: 'Website jewellery catalog. Re-import from ERP when you need a fresh copy.',
       img: '/images/admin/jewellery_thumb.png',
       link: '/upload/jewellery',
       color: 'from-blue-500 to-indigo-600',
@@ -48,6 +48,13 @@ export default function AdminHome() {
       img: '/images/admin/landing_thumb.png',
       link: '/upload/shipping',
       color: 'from-teal-500 to-emerald-600',
+    },
+    {
+      title: 'Buy X Get Y',
+      desc: 'Cart offers: paid pieces plus free extras. Highest matching tier wins.',
+      img: '/images/admin/landing_thumb.png',
+      link: '/upload/offers',
+      color: 'from-orange-500 to-rose-500',
     },
     {
       title: 'Legal Policies',

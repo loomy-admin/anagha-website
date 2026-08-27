@@ -21,8 +21,15 @@ function siteBase() {
     .replace(/\/+$/, '');
 }
 
-export function orderNumber(session: Record<string, any>) {
-  return String(session.erpBillNumber || `AN-${String(session.id || '').slice(0, 8).toUpperCase()}`);
+type LineItem = Record<string, unknown>;
+
+export function orderNumber(session: Record<string, unknown>) {
+  return String(
+    session.erpBillNumber ||
+      session.erp_bill_number ||
+      session.order_id ||
+      `AJ-${String(session.id || '').slice(0, 8).toUpperCase()}`,
+  );
 }
 
 function firstPositive(...values: unknown[]) {
@@ -33,12 +40,16 @@ function firstPositive(...values: unknown[]) {
   return 0;
 }
 
-function lineQty(item: Record<string, any>) {
+function lineQty(item: LineItem) {
   const qty = Number(item.quantity ?? item.qty ?? item.pcs ?? 1);
   return Number.isFinite(qty) && qty > 0 ? qty : 1;
 }
 
-function lineAmount(item: Record<string, any>) {
+function lineAmount(item: LineItem) {
+  if (item.item_total != null && item.item_total !== '') {
+    const discounted = Number(item.item_total);
+    if (Number.isFinite(discounted)) return Math.max(0, discounted);
+  }
   const qty = lineQty(item);
   const total = firstPositive(
     item.item_total,
@@ -54,13 +65,25 @@ function lineAmount(item: Record<string, any>) {
   return firstPositive(item.rate, item.unit_price) * qty;
 }
 
-function itemsFromSession(session: Record<string, any>, fallback: any[] = []) {
-  const payload = session.paymentPayload;
-  if (payload && Array.isArray(payload.items) && payload.items.length) return payload.items;
-  if (payload && Array.isArray(payload.item_names) && payload.item_names.length) {
-    return payload.item_names.map((name: string) => ({ name }));
+function asLineItems(value: unknown): LineItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (row): row is LineItem => Boolean(row) && typeof row === 'object' && !Array.isArray(row),
+  );
+}
+
+function itemsFromSession(session: Record<string, unknown>, fallback: LineItem[] = []) {
+  const payload =
+    session.paymentPayload && typeof session.paymentPayload === 'object'
+      ? (session.paymentPayload as Record<string, unknown>)
+      : {};
+  const fromCart = asLineItems(payload.items);
+  if (fromCart.length) return fromCart;
+  if (Array.isArray(payload.item_names) && payload.item_names.length) {
+    return payload.item_names.map((name) => ({ name: String(name || '') }));
   }
-  return fallback;
+  const fromFallback = asLineItems(fallback);
+  return fromFallback.length ? fromFallback : fallback;
 }
 
 function fieldText(value: unknown) {
@@ -96,7 +119,7 @@ function addressHtml(raw: unknown) {
 }
 
 type OrderView = {
-  session: any;
+  session: Record<string, unknown>;
   billNo: string;
   date: string;
   name: string;
@@ -106,6 +129,7 @@ type OrderView = {
   itemsAmount: number;
   shippingAmount: number;
   shippingName: string;
+  shippingEta: string;
   totalAmount: number;
   address: string;
   courierName: string;
@@ -113,13 +137,32 @@ type OrderView = {
   trackingUrl: string;
 };
 
-function orderView(session: any, items: any[] = []): OrderView {
+function sessionText(session: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = session[key];
+    if (value == null) continue;
+    if (typeof value === 'string' || typeof value === 'number') return String(value);
+  }
+  return '';
+}
+
+function orderView(session: Record<string, unknown>, items: LineItem[] = []): OrderView {
   const billNo = orderNumber(session);
-  const date = new Date(session.createdAt || session.created_at || Date.now()).toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  const created = session.createdAt || session.created_at;
+  const createdDate =
+    created instanceof Date
+      ? created
+      : typeof created === 'string' || typeof created === 'number'
+        ? new Date(created)
+        : new Date();
+  const date = (Number.isNaN(createdDate.getTime()) ? new Date() : createdDate).toLocaleDateString(
+    'en-IN',
+    {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    },
+  );
   const shippingAmount = Number(session.shippingAmount ?? session.shipping_amount ?? 0);
   const totalAmount = Number(session.amount);
   const storedItemsAmount = Number(session.itemsAmount ?? session.items_amount);
@@ -143,10 +186,10 @@ function orderView(session: any, items: any[] = []): OrderView {
   const itemsHtml = pricedLines.length
     ? pricedLines
         .map(
-          ({ item, qty, amount }) => `
+          ({ item, qty, amount }: { item: LineItem; qty: number; amount: number }) => `
             <tr>
               <td style="padding:12px 0;border-bottom:1px solid #eee;font-size:14px;color:#222;">
-                <strong>${escapeHtml(item.name || item.description || item.article || 'Jewellery')}</strong>
+                <strong>${escapeHtml(item.name || item.product_name || item.article || item.description || 'Jewellery')}</strong>
                 ${item.tag_number ? `<div style="color:#888;font-size:12px;margin-top:2px;">Tag ${escapeHtml(item.tag_number)}</div>` : ''}
               </td>
               <td style="padding:12px 0;border-bottom:1px solid #eee;font-size:13px;color:#555;text-align:center;">${qty}</td>
@@ -160,18 +203,19 @@ function orderView(session: any, items: any[] = []): OrderView {
     session,
     billNo,
     date,
-    name: String(session.customerName || 'there'),
+    name: sessionText(session, 'customerName', 'customer_name') || 'there',
     logoUrl: `${siteBase()}/images/brand_logo.png`,
     ordersUrl: `${siteBase()}/account/orders`,
     itemsHtml,
     itemsAmount,
     shippingAmount,
-    shippingName: session.shippingMethodName || session.shipping_method_name || '',
+    shippingName: sessionText(session, 'shippingMethodName', 'shipping_method_name'),
+    shippingEta: sessionText(session, 'shippingEta', 'shipping_eta').trim(),
     totalAmount,
     address: addressHtml(session.shippingAddress || session.shipping_address),
-    courierName: session.courierName || session.courier_name || '',
-    trackingNumber: session.trackingNumber || session.tracking_number || '',
-    trackingUrl: session.trackingUrl || session.tracking_url || '',
+    courierName: sessionText(session, 'courierName', 'courier_name'),
+    trackingNumber: sessionText(session, 'trackingNumber', 'tracking_number'),
+    trackingUrl: sessionText(session, 'trackingUrl', 'tracking_url'),
   };
 }
 
@@ -258,7 +302,7 @@ function cta(href: string, label: string, color: string) {
 }
 
 /** After payment — order placed, invoice already sent separately. */
-export function confirmationHtml(session: any, items: any[] = []) {
+export function confirmationHtml(session: Record<string, unknown>, items: LineItem[] = []) {
   const view = orderView(session, items);
   const body = `
     <tr>
@@ -267,7 +311,7 @@ export function confirmationHtml(session: any, items: any[] = []) {
         <h1 style="margin:16px 0 8px;font-size:24px;line-height:1.3;color:#032C5E;">Thank you. We have received your order.</h1>
         <p style="margin:0;color:#666;font-size:14px;line-height:1.6;">
           Hello ${escapeHtml(view.name)}, your payment is complete. A sales invoice was emailed separately.
-          Our team will now prepare your jewellery.
+          This is an online delivery order. Our team will now prepare your jewellery.
         </p>
       </td>
     </tr>
@@ -279,7 +323,7 @@ export function confirmationHtml(session: any, items: any[] = []) {
         <p style="margin:0 0 8px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#888;font-weight:bold;">Deliver to</p>
         <p style="margin:0;font-size:13px;line-height:1.6;color:#333;">${view.address}</p>
         <p style="margin:16px 0 0;padding:12px 14px;background:#fff7ed;border-radius:10px;font-size:13px;color:#9a3412;line-height:1.5;">
-          Next step: packing. You will get another email when your order is packed.
+          Expected delivery${view.shippingName ? ` · ${escapeHtml(view.shippingName)}` : ''}${view.shippingEta ? `: <strong>${escapeHtml(view.shippingEta)}</strong>` : '. You will get another email when your order is packed.'}
         </p>
       </td>
     </tr>
@@ -298,7 +342,7 @@ export function confirmationHtml(session: any, items: any[] = []) {
 }
 
 /** Packed — ready for courier, no AWB yet. */
-export function packedHtml(session: any, items: any[] = []) {
+export function packedHtml(session: Record<string, unknown>, items: LineItem[] = []) {
   const view = orderView(session, items);
   const body = `
     <tr>
@@ -334,7 +378,7 @@ export function packedHtml(session: any, items: any[] = []) {
 }
 
 /** Shipped — tracking is the main content. */
-export function shippedHtml(session: any, items: any[] = []) {
+export function shippedHtml(session: Record<string, unknown>, items: LineItem[] = []) {
   const view = orderView(session, items);
   const hasTrack = Boolean(view.trackingNumber || view.trackingUrl || view.courierName);
   const trackPanel = hasTrack
@@ -392,7 +436,7 @@ export function shippedHtml(session: any, items: any[] = []) {
 }
 
 /** Delivered — thank you, no tracking placeholder. */
-export function deliveredHtml(session: any, items: any[] = []) {
+export function deliveredHtml(session: Record<string, unknown>, items: LineItem[] = []) {
   const view = orderView(session, items);
   const body = `
     <tr>
@@ -428,12 +472,16 @@ export function deliveredHtml(session: any, items: any[] = []) {
   });
 }
 
-export function htmlForFulfillment(session: any, items: any[] = []) {
-  const status = String(session.status || '');
+export function htmlForFulfillment(session: Record<string, unknown>, items: LineItem[] = []) {
+  const status = sessionText(session, 'status');
   if (status === 'delivered') return { kind: 'delivered', html: deliveredHtml(session, items), subject: `Order ${orderNumber(session)} has been delivered` };
   if (status === 'shipped') return { kind: 'shipped', html: shippedHtml(session, items), subject: `Order ${orderNumber(session)} has been shipped` };
   if (status === 'packed') return { kind: 'packed', html: packedHtml(session, items), subject: `Order ${orderNumber(session)} has been packed` };
-  if (session.trackingNumber || session.trackingUrl || session.courierName) {
+  if (
+    sessionText(session, 'trackingNumber', 'tracking_number') ||
+    sessionText(session, 'trackingUrl', 'tracking_url') ||
+    sessionText(session, 'courierName', 'courier_name')
+  ) {
     return { kind: 'shipped', html: shippedHtml(session, items), subject: `Tracking update for order ${orderNumber(session)}` };
   }
   return { kind: 'packed', html: packedHtml(session, items), subject: `Order ${orderNumber(session)} update` };
