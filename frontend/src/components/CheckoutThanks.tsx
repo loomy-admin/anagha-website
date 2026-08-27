@@ -162,8 +162,8 @@ export default function CheckoutThanks() {
           <div className="flex justify-between gap-4 text-sm mb-2">
             <span className="text-gray-500">Delivery</span>
             <span className="font-medium text-right">
-              {session.shipping_method_name || 'Online delivery'}
-              {session.shipping_eta ? ` · ${session.shipping_eta}` : ''}
+              {session?.shipping_method_name || 'Online delivery'}
+              {session?.shipping_eta ? ` · ${session.shipping_eta}` : ''}
             </span>
           </div>
         ) : null}
@@ -185,7 +185,7 @@ export default function CheckoutThanks() {
         <div className="mb-10">
           <BillFrame
             billId={invoiceId}
-            billNumber={session.erp_bill_number}
+            billNumber={session?.erp_bill_number}
             size="hero"
           />
         </div>
@@ -195,7 +195,7 @@ export default function CheckoutThanks() {
         {invoiceId ? (
           <a
             href={`/api/site/invoice/${encodeURIComponent(invoiceId)}`}
-            download={`Invoice-${session.erp_bill_number || invoiceId}.pdf`}
+            download={`Invoice-${session?.erp_bill_number || invoiceId}.pdf`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 border border-[#032C5E] text-[#032C5E] bg-white hover:bg-[#032C5E] hover:text-white transition-colors text-xs font-bold uppercase tracking-widest px-8 py-3 rounded-full"
