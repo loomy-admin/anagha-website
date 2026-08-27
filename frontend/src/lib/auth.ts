@@ -93,12 +93,12 @@ export async function loginAccount(input: { email: string; password: string }) {
   return body.data as WebsiteCustomer;
 }
 
-export async function googleLogin(credential: string) {
+export async function googleLogin(token: { credential?: string; accessToken?: string }) {
   const res = await fetch('/api/auth/google', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ credential }),
+    body: JSON.stringify(token),
   });
   const body = await parseJson(res);
   if (!res.ok) {

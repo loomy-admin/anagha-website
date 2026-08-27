@@ -86,7 +86,7 @@ export default function ProductCard({ product }: { product: CatalogItem }) {
           )}
         </div>
       </div>
-      <div className="p-4 flex flex-col flex-1 items-start text-left bg-white">
+      <div className="p-2.5 sm:p-4 flex flex-col flex-1 items-start text-left bg-white">
         <div className="flex items-center gap-2 mb-1.5 flex-wrap min-h-[24px]">
           <span className={`font-bold text-[15px] md:text-[16px] ${showPrice ? 'text-[#222]' : 'text-gray-500 text-[13px]'}`}>
             {priceLabel}

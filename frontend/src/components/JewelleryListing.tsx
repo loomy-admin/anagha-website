@@ -601,7 +601,7 @@ export default function JewelleryListing({ category, audience, article, search, 
   };
 
   return (
-    <main className="w-full bg-[#f9f9f9] min-h-screen font-sans pb-24 lg:pb-20">
+    <main className="w-full bg-[#f9f9f9] min-h-screen font-sans pb-28 lg:pb-20">
       <div className="max-w-[1400px] mx-auto px-4 md:px-8 mt-6">
         {searchTerm ? (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
@@ -651,15 +651,15 @@ export default function JewelleryListing({ category, audience, article, search, 
 
           {/* Product grid — full width on mobile; keep layout stable while refreshing */}
           <div className="flex-1 w-full min-w-0 relative">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-sm text-gray-500 hidden md:block">
+            <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 mb-4">
+              <span className="text-xs sm:text-sm text-gray-500">
                 {total > 0 ? `Showing ${(page - 1) * 48 + 1} - ${Math.min(page * 48, total)} of ${total} items` : ''}
               </span>
-              <div className="flex items-center gap-2 ml-auto">
+              <div className="flex items-center gap-2 xs:ml-auto min-w-0">
                 <label htmlFor="sort-select" className="text-sm font-medium text-gray-600 hidden sm:block">Sort by:</label>
                 <select
                   id="sort-select"
-                  className="text-sm border border-gray-300 rounded-md py-1.5 px-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#032C5E] focus:border-[#032C5E] text-gray-700 font-medium cursor-pointer"
+                  className="text-sm border border-gray-300 rounded-md py-1.5 px-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#032C5E] focus:border-[#032C5E] text-gray-700 font-medium cursor-pointer w-full xs:w-auto max-w-full"
                   value={active.sort || ''}
                   onChange={(e) => {
                     const nextSort = e.target.value;

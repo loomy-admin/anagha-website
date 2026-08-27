@@ -60,8 +60,8 @@ export default function ProductDetailPanel({
 
   return (
     <div className="flex-1 lg:pl-4">
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <h1 className="font-domine text-[#222] text-2xl font-bold min-w-0">{name}</h1>
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-2">
+        <h1 className="font-domine text-[#222] text-xl sm:text-2xl font-bold min-w-0 break-words">{name}</h1>
         {displayPrice != null && Number(displayPrice) > 0 ? (
           <div className="shrink-0 pt-1">
             <AddToCartButton item={cartItem} />

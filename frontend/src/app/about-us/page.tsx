@@ -20,7 +20,7 @@ export default async function AboutUsPage() {
   return (
     <>
       <Header />
-      <main className="w-full bg-[#fcfcfc] font-domine min-h-screen py-16 lg:py-24">
+      <main className="w-full bg-[#fcfcfc] font-domine min-h-screen py-10 sm:py-16 lg:py-24">
         <div className="max-w-[1000px] mx-auto px-4 md:px-8">
           {/* Title Section */}
           <div className="flex flex-col items-center justify-center mb-16">

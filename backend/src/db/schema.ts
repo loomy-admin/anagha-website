@@ -87,6 +87,16 @@ export const checkoutSessions = pgTable('checkout_sessions', {
   erpBillNumber: text('erp_bill_number'),
   paymentPayload: jsonb('payment_payload').default({}),
   shippingAddress: jsonb('shipping_address').default({}),
+  itemsAmount: text('items_amount'),
+  shippingAmount: text('shipping_amount').default('0'),
+  shippingMethodId: text('shipping_method_id'),
+  shippingMethodName: text('shipping_method_name'),
+  courierName: text('courier_name'),
+  trackingNumber: text('tracking_number'),
+  trackingUrl: text('tracking_url'),
+  packedAt: timestamp('packed_at', { withTimezone: true }),
+  shippedAt: timestamp('shipped_at', { withTimezone: true }),
+  deliveredAt: timestamp('delivered_at', { withTimezone: true }),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()

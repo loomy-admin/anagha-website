@@ -80,17 +80,22 @@ router.put('/promise', async (req, res) => {
 
 // GET all content (for the public home page, we mount under /api/site)
 router.get('/content', async (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   try {
-    res.setHeader('Cache-Control', 'no-store');
-    const all = await getAllContent();
-    // Inject the visibility config if missing
+    let all: Record<string, unknown>;
+    try {
+      all = await getAllContent();
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      all = await getAllContent();
+    }
     if (!all.landing_visibility) {
       all.landing_visibility = defaultConfig;
     }
     res.json(all);
   } catch (err) {
     console.error('[landingConfig] GET content Error:', err);
-    res.status(500).json({ error: 'Failed to fetch landing content' });
+    res.json({ landing_visibility: defaultConfig });
   }
 });
 

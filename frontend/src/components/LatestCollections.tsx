@@ -33,7 +33,7 @@ export default function LatestCollections({ live, btnLink = '#' }: Props) {
   };
 
   return (
-    <section className="bg-white pt-6 pb-8">
+    <section className="bg-white pt-4 pb-6 sm:pt-6 sm:pb-8">
       <motion.div 
         variants={containerVariants}
         initial="hidden"
@@ -41,12 +41,12 @@ export default function LatestCollections({ live, btnLink = '#' }: Props) {
         viewport={{ once: true, amount: 0.3 }}
       >
         {/* Title */}
-        <motion.h2 variants={itemVariants} className="text-center text-[28px] font-domine text-[#032C5E] tracking-wide mb-6">
+        <motion.h2 variants={itemVariants} className="text-center text-[22px] sm:text-[28px] font-domine text-[#032C5E] tracking-wide mb-4 sm:mb-6 px-4">
           Browse Latest Jewellery Collections
         </motion.h2>
 
         {/* Row — collapses to column on mobile */}
-        <div className="flex flex-col md:flex-row items-center md:items-end justify-center gap-6 md:gap-4 px-6 max-w-7xl mx-auto w-full">
+        <div className="flex flex-col md:flex-row items-center md:items-end justify-center gap-6 md:gap-4 px-4 sm:px-6 max-w-7xl mx-auto w-full">
 
           {/* Left card */}
           <motion.div variants={itemVariants} className="w-full max-w-md md:flex-1 md:max-w-[33%]">

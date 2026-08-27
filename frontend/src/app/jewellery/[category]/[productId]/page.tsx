@@ -59,7 +59,7 @@ export default async function ProductDetailPage({
   return (
     <main className="w-full bg-white min-h-screen font-sans pb-20">
       <div className="max-w-[1400px] mx-auto px-4 md:px-8 pt-6 pb-2">
-        <p className="text-[11px] text-gray-400 uppercase tracking-widest">
+        <p className="text-[11px] text-gray-400 uppercase tracking-widest break-words leading-relaxed">
           <Link href="/" className="hover:text-[#f1592a] transition-colors">Home</Link>
           {' '}/ <Link href="/jewellery" className="hover:text-[#f1592a] transition-colors">Jewellery</Link>
           {' '}/{' '}
@@ -71,7 +71,7 @@ export default async function ProductDetailPage({
       </div>
 
       <div className="max-w-[1400px] mx-auto px-4 md:px-8 mt-8">
-        <div className="flex flex-col lg:flex-row gap-12 lg:gap-20">
+        <div className="flex flex-col lg:flex-row gap-8 lg:gap-20">
           <div className="w-full lg:w-[45%] flex flex-col items-center">
             <ProductGallery images={gallery} alt={product.name} product={product} />
           </div>

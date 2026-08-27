@@ -54,9 +54,9 @@ export default function DesignLed({ liveImages, liveLabels }: Props) {
   };
 
   return (
-    <section className="bg-white py-12 perspective-[2000px]">
+    <section className="bg-white py-6 sm:py-12 perspective-[2000px]">
       {/* Title */}
-      <h2 className="text-center text-[28px] font-domine text-[#032C5E] tracking-wide mb-10">
+      <h2 className="text-center text-[22px] sm:text-[28px] font-domine text-[#032C5E] tracking-wide mb-6 sm:mb-10 px-4">
         Design Led Jewellery
       </h2>
 
@@ -80,7 +80,7 @@ export default function DesignLed({ liveImages, liveLabels }: Props) {
               <Link href={`/jewellery/${item.slug}`} className="flex flex-col items-center w-full group">
 
                 {/* Image Box */}
-                <div className="relative w-[92%] max-w-[380px] mx-auto mb-24 border-2 border-[#f1592a] rounded-[16px] shadow-sm bg-[#fafafa] transform-style-3d group-hover:shadow-md transition-shadow duration-300">
+                <div className="relative w-[92%] max-w-[380px] mx-auto mb-20 sm:mb-24 border-2 border-[#f1592a] rounded-[16px] shadow-sm bg-[#fafafa] transform-style-3d group-hover:shadow-md transition-shadow duration-300">
                   <img 
                     src={displayLarge} 
                     alt={`${displayLabel} worn`} 

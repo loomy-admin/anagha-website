@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { fetchMe, type WebsiteCustomer } from '@/lib/auth';
 import { fetchMyOrders, type CheckoutSession } from '@/lib/checkout';
 import { formatDisplayPrice } from '@/lib/erpCatalog';
+import { formatOrderAddressLines } from '@/lib/orderAddress';
 import BillFrame from '@/components/BillFrame';
 
 function formatDate(value?: string | null) {
@@ -18,6 +19,20 @@ function formatDate(value?: string | null) {
     year: 'numeric',
   });
 }
+
+const STATUS_LABEL: Record<string, string> = {
+  paid: 'Paid — preparing',
+  packed: 'Packed',
+  shipped: 'Shipped',
+  delivered: 'Delivered',
+};
+
+const STATUS_CLASS: Record<string, string> = {
+  paid: 'text-amber-700',
+  packed: 'text-blue-700',
+  shipped: 'text-[#032C5E]',
+  delivered: 'text-emerald-600',
+};
 
 export default function AccountOrders() {
   const router = useRouter();
@@ -98,6 +113,10 @@ export default function AccountOrders() {
         <ul className="space-y-4">
           {orders.map((order) => {
             const names = (order.item_names || []).filter(Boolean);
+            const fromOrder = formatOrderAddressLines(order.shipping_address);
+            const deliveryLines = fromOrder.length
+              ? fromOrder
+              : formatOrderAddressLines(customer.shippingAddress);
             return (
               <li
                 key={order.id}
@@ -105,8 +124,8 @@ export default function AccountOrders() {
               >
                 <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
                   <div>
-                    <p className="text-[11px] uppercase tracking-widest text-emerald-600 font-bold">
-                      Paid
+                    <p className={`text-[11px] uppercase tracking-widest font-bold ${STATUS_CLASS[order.status] || 'text-gray-600'}`}>
+                      {STATUS_LABEL[order.status] || order.status}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">{formatDate(order.created_at)}</p>
                   </div>
@@ -127,6 +146,45 @@ export default function AccountOrders() {
                     <span className="text-gray-500">Jewellery purchase</span>
                   )}
                 </div>
+                {order.shipping_method_name ? (
+                  <p className="text-sm mt-2 text-gray-500">
+                    Shipping: <span className="font-medium text-[#222]">{order.shipping_method_name}</span>
+                    {order.shipping_amount ? ` · ${formatDisplayPrice(order.shipping_amount)}` : ''}
+                  </p>
+                ) : null}
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-1">
+                    Delivery address
+                  </p>
+                  {deliveryLines.length ? (
+                    <div className="text-sm text-[#222] leading-relaxed">
+                      {deliveryLines.map((line) => (
+                        <p key={line}>{line}</p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400">No delivery address on this order.</p>
+                  )}
+                </div>
+                {order.tracking_number ? (
+                  <div className="text-sm mt-2">
+                    <span className="text-gray-500">Tracking: </span>
+                    <span className="font-medium">{order.courier_name ? `${order.courier_name} · ` : ''}{order.tracking_number}</span>
+                    {order.tracking_url ? (
+                      <>
+                        {' '}
+                        <a
+                          href={order.tracking_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[#032C5E] underline"
+                        >
+                          Track
+                        </a>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
                 {order.erp_bill_number ? (
                   <div className="text-sm mt-2">
                     <span className="text-gray-500">Store bill: </span>

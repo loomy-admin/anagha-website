@@ -143,6 +143,16 @@ async function main() {
   await sql`CREATE INDEX IF NOT EXISTS checkout_sessions_customer_idx ON checkout_sessions (website_customer_id)`;
 
   await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS shipping_address JSONB DEFAULT '{}'::jsonb`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS items_amount TEXT`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS shipping_amount TEXT DEFAULT '0'`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS shipping_method_id TEXT`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS shipping_method_name TEXT`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS courier_name TEXT`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS tracking_number TEXT`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS tracking_url TEXT`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS packed_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS cached_catalog_items (

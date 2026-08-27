@@ -3,7 +3,6 @@
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchMe, updateMe, type WebsiteCustomer } from '@/lib/auth';
-import AccountAddress from '@/components/AccountAddress';
 
 export default function AccountProfile() {
   const router = useRouter();
@@ -139,10 +138,6 @@ export default function AccountProfile() {
             </button>
           </div>
         </form>
-      </div>
-
-      <div className="mt-12">
-        <AccountAddress />
       </div>
     </div>
   );

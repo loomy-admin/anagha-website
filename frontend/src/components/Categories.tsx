@@ -76,9 +76,9 @@ export default function Categories({ goldLive, silverLive, goldPlan, silverPlan,
   }, []);
 
   return (
-    <section className="bg-white py-10 overflow-hidden">
-      <div className="w-full px-6">
-        <div className="flex items-center justify-center mb-10">
+    <section className="bg-white pt-4 pb-3 sm:py-8 md:py-10 overflow-hidden">
+      <div className="w-full px-4 sm:px-6">
+        <div className="flex items-center justify-center mb-5 sm:mb-10">
           <div className="relative inline-flex rounded-full bg-gray-100 p-1.5 gap-1">
             <button
               type="button"
@@ -90,7 +90,7 @@ export default function Categories({ goldLive, silverLive, goldPlan, silverPlan,
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4 md:gap-x-4 md:gap-y-8">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 sm:gap-4 md:gap-x-4 md:gap-y-8">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="flex flex-col items-center gap-3 animate-pulse">
                 <div className="w-full aspect-square rounded-[22px] bg-[#f4f6f9]" />
@@ -107,7 +107,7 @@ export default function Categories({ goldLive, silverLive, goldPlan, silverPlan,
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, amount: 0.2 }}
-            className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4 md:gap-x-4 md:gap-y-8"
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 sm:gap-4 md:gap-x-4 md:gap-y-8"
           >
             {groups.map((g, i) => {
               const slug = g.slug || slugifyName(g.name);
@@ -161,7 +161,7 @@ export default function Categories({ goldLive, silverLive, goldPlan, silverPlan,
             backgroundPosition: 'top, bottom, center',
             backgroundRepeat: 'no-repeat',
           }}
-          className="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-6 w-full py-5 md:py-3.5 mt-10 md:mt-16 text-center md:text-left"
+          className="flex flex-col md:flex-row items-center justify-center gap-3 md:gap-6 w-full py-3 md:py-3.5 mt-6 md:mt-16 text-center md:text-left"
         >
           <p className="text-[12px] md:text-[13.5px] text-navy">
             <span className="font-bold block sm:inline">{plan.badge} </span>

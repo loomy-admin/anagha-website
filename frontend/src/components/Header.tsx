@@ -396,9 +396,9 @@ export default function Header() {
     <>
       {/* Mobile header */}
       <div className="flex flex-col lg:hidden bg-white shrink-0 sticky top-0 z-[100] shadow-sm">
-        <div className="flex items-center justify-between px-4 h-16">
-          <div className="flex items-center gap-3">
-            <button aria-label="Menu" className="text-navy" onClick={() => setMobileMenuOpen(true)}>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center px-3 xs:px-4 h-14 sm:h-16 gap-2">
+          <div className="flex items-center gap-1.5 xs:gap-2 min-w-0">
+            <button aria-label="Menu" className="text-navy p-1 -ml-1 shrink-0" onClick={() => setMobileMenuOpen(true)}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
@@ -407,11 +407,11 @@ export default function Header() {
               href={`https://wa.me/${whatsapp.replace(/[^0-9]/g, '')}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-10 h-10 rounded-full border border-gray-100 flex items-center justify-center text-[#f1592a] hover:bg-[#f1592a] hover:text-white hover:border-[#f1592a] transition-all"
+              className="hidden xs:flex w-9 h-9 sm:w-10 sm:h-10 rounded-full border border-gray-100 items-center justify-center text-[#f1592a] hover:bg-[#f1592a] hover:text-white hover:border-[#f1592a] transition-all shrink-0"
             >
               <WhatsAppIcon />
             </a>
-            <div className="w-7 h-7 rounded-full overflow-hidden border border-gray-300 flex items-center justify-center bg-white shrink-0">
+            <div className="hidden sm:flex w-7 h-7 rounded-full overflow-hidden border border-gray-300 items-center justify-center bg-white shrink-0">
               <img
                 src={logoIconUrl}
                 alt="Logo"
@@ -419,20 +419,20 @@ export default function Header() {
               />
             </div>
           </div>
-          <Link href="/" className="flex items-center">
+          <Link href="/" className="flex items-center justify-center min-w-0 px-1">
             <Image
               src={logoUrl}
               alt="Anagha"
               width={120}
               height={40}
-              className="h-10 w-auto object-contain [clip-path:inset(1px_4px)]"
+              className="h-8 sm:h-10 w-auto max-w-[140px] sm:max-w-[180px] object-contain [clip-path:inset(1px_4px)]"
               style={{ width: 'auto' }}
               unoptimized
               priority
             />
           </Link>
-          <div className="flex items-center gap-4 text-navy">
-            <Link href="/wishlist" aria-label="Wishlist" className="relative inline-flex hover:text-coral transition-colors">
+          <div className="flex items-center justify-end gap-3 sm:gap-4 text-navy">
+            <Link href="/wishlist" aria-label="Wishlist" className="relative inline-flex hover:text-coral transition-colors p-0.5">
               <HeartIcon />
               {wishlistCount > 0 ? (
                 <span className="absolute -top-1 -right-2 min-w-[15px] h-[15px] px-0.5 rounded-full bg-[#f1592a] text-white text-[9px] flex items-center justify-center font-bold">
@@ -440,7 +440,7 @@ export default function Header() {
                 </span>
               ) : null}
             </Link>
-            <Link href="/cart" aria-label="Shopping cart" className="relative inline-flex hover:text-coral transition-colors">
+            <Link href="/cart" aria-label="Shopping cart" className="relative inline-flex hover:text-coral transition-colors p-0.5">
               <BagIcon />
               {cartCount > 0 ? (
                 <span className="absolute -top-1 -right-2 min-w-[15px] h-[15px] px-0.5 rounded-full bg-[#f1592a] text-white text-[9px] flex items-center justify-center font-bold">
@@ -534,6 +534,14 @@ export default function Header() {
 
           <div className="flex-1 overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap gap-4 text-[12px] font-semibold text-navy">
+              <a
+                href={`https://wa.me/${whatsapp.replace(/[^0-9]/g, '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                WhatsApp
+              </a>
               <Link href="/cart" onClick={() => setMobileMenuOpen(false)}>
                 Cart{cartCount > 0 ? ` (${cartCount})` : ''}
               </Link>
@@ -729,8 +737,10 @@ export default function Header() {
       </div>
 
       {/* Desktop navy nav — ERP groups */}
-      <nav className="sticky top-0 z-50 bg-navy h-[46px] hidden lg:flex items-center px-10 overflow-x-clip w-full max-w-[100vw]">
-        <div
+      <nav className="sticky top-0 z-50 bg-navy h-[46px] hidden lg:flex items-center px-10 overflow-visible w-full max-w-[100vw]">
+        <Link
+          href="/"
+          aria-label="Home"
           className={`absolute left-10 z-50 transition-all duration-300 ease-in-out origin-top-left bg-white rounded-full overflow-hidden shadow-sm flex items-center justify-center ${
             scrolled ? 'w-[30px] h-[30px] top-[8px]' : 'w-[75px] h-[75px] -top-[64px]'
           }`}
@@ -744,30 +754,37 @@ export default function Header() {
             unoptimized
             priority
           />
-        </div>
+        </Link>
 
-        <ul className="flex items-center h-full w-full justify-center gap-2 xl:gap-5 list-none pl-10">
-          {navItems.map((item) => {
+        <ul className="flex items-center h-full w-full justify-center gap-2 xl:gap-5 list-none pl-10 min-w-0">
+          {navItems.map((item, index) => {
               const isAll = item.slug === 'all-jewellery';
               const hasMega = !isAll;
               const articles = item.dropdown?.articles || [];
               const callout = item.dropdown?.callout;
+              const isFirst = index === 0;
+              const isLast = index === navItems.length - 1;
+              const megaPos = isFirst
+                ? 'left-0 translate-x-0'
+                : isLast
+                  ? 'left-auto right-0 translate-x-0'
+                  : 'left-1/2 -translate-x-1/2';
               return (
                 <li
                   key={item.slug}
-                  className="group relative flex items-center h-full px-1 text-white text-[10.5px] xl:text-[12px] font-medium whitespace-nowrap hover:bg-white/10 transition-colors"
+                  className="group relative flex items-center h-full px-1.5 xl:px-2 text-white text-[10px] xl:text-[12px] font-medium whitespace-nowrap hover:bg-white/10 transition-colors after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-3 after:bg-transparent"
                 >
                   <Link
                     href={isAll ? '/jewellery' : `/jewellery/${item.slug}`}
-                    className="flex items-center gap-1 h-full"
+                    className="flex items-center gap-0.5 h-full"
                   >
                     {item.label}
-                    <span className="text-[13px] xl:text-[15px] leading-none">▾</span>
+                    <span className="text-[12px] xl:text-[15px] leading-none opacity-80">▾</span>
                   </Link>
 
                   {isAll && allGroups.length > 0 ? (
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 bg-white shadow-2xl w-[520px] max-h-[70vh] overflow-y-auto py-6 rounded-b-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] border-t-2 border-navy">
-                      <div className="px-8">
+                    <div className={`absolute top-full ${megaPos} pt-0 bg-white shadow-2xl w-[min(520px,calc(100vw-1.5rem))] max-h-[70vh] overflow-y-auto py-6 rounded-b-md border-t-2 border-navy z-[120] invisible opacity-0 pointer-events-none group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-150`}>
+                      <div className="px-6 xl:px-8">
                         <h4 className="text-navy font-bold text-[14px] mb-4 border-b border-gray-200 pb-2">
                           Shop by category
                         </h4>
@@ -794,8 +811,8 @@ export default function Header() {
                   ) : null}
 
                   {hasMega ? (
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 bg-white shadow-2xl w-[640px] max-w-[90vw] py-6 rounded-b-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] border-t-2 border-navy">
-                      <div className="px-8 grid grid-cols-2 gap-10">
+                    <div className={`absolute top-full ${megaPos} bg-white shadow-2xl w-[min(640px,calc(100vw-1.5rem))] max-h-[70vh] overflow-y-auto py-6 rounded-b-md border-t-2 border-navy z-[120] invisible opacity-0 pointer-events-none group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-150`}>
+                      <div className="px-5 xl:px-8 grid grid-cols-1 sm:grid-cols-2 gap-6 xl:gap-10">
                         <div>
                           <h4 className="text-navy font-bold text-[14px] mb-3 border-b border-gray-200 pb-2">
                             By Price Range

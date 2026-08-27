@@ -62,13 +62,13 @@ export default function CuratedStyles({ liveSlots, liveTitles }: Props) {
   };
 
   return (
-    <section className="bg-white py-10 overflow-hidden">
+    <section className="bg-white py-6 sm:py-10 overflow-hidden">
       <motion.div 
         variants={containerVariants}
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, amount: 0.3 }}
-        className="w-full px-8 mx-auto flex flex-col lg:flex-row items-center lg:divide-x lg:divide-[#f6e1e1]"
+        className="w-full px-4 sm:px-8 mx-auto flex flex-col lg:flex-row items-center lg:divide-x lg:divide-[#f6e1e1]"
       >
         
         {/* LEFT COMPONENT: 3 Cards Grid */}

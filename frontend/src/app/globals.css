@@ -6,13 +6,33 @@
 
 @layer base {
   * { box-sizing: border-box; }
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  html, body {
+    max-width: 100%;
+    overflow-x: clip;
+  }
   body {
     font-family: 'Inter', sans-serif;
     color: #222;
     background: #fff;
     -webkit-font-smoothing: antialiased;
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
   }
+  img, video { max-width: 100%; }
   a { text-decoration: none; color: inherit; }
+  button, a, input, select, textarea { touch-action: manipulation; }
+}
 
-
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }

@@ -36,8 +36,8 @@ const YouTubeIcon = () => (
 export default function Footer() {
   const { whatsapp, email, instagram, youtube } = useContactInfo();
   return (
-    <footer className="bg-[#041d36] text-white pt-16 pb-8 font-sans overflow-x-clip w-full max-w-[100vw]">
-      <div className="max-w-[1400px] mx-auto px-6 xl:px-12">
+    <footer className="bg-[#041d36] text-white pt-12 sm:pt-16 pb-8 font-sans overflow-x-clip w-full max-w-[100vw]">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 xl:px-12">
         {/* Top Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
           
@@ -48,7 +48,7 @@ export default function Footer() {
               <li><Link href="/contact-us" className="hover:text-white transition-colors">Contact Us</Link></li>
               <li className="flex items-center gap-2">
                 <MailIcon />
-                <span>{email}</span>
+                <span className="break-all">{email}</span>
               </li>
             </ul>
           </div>
@@ -82,7 +82,7 @@ export default function Footer() {
         <div className="w-full h-px bg-white/10 mt-16 mb-8"></div>
 
         {/* Bottom Section */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left">
           
           {/* Socials */}
           <div className="flex items-center gap-4">
@@ -106,7 +106,7 @@ export default function Footer() {
 
 
           {/* Copyright */}
-          <div className="text-right">
+          <div className="text-center md:text-right">
             <p className="text-[12px] text-gray-400">© 2026 Anagha. All Rights Reserved.</p>
           </div>
 

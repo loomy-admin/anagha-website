@@ -1,16 +1,73 @@
 import nodemailer from 'nodemailer';
 import { getErpConfig } from './erpCatalog.js';
+import { confirmationHtml, htmlForFulfillment, orderNumber } from './orderEmails.js';
 
+const smtpPort = Number(process.env.SMTP_PORT) || 465;
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: Number(process.env.SMTP_PORT) || 465,
-  secure: true,
+  port: smtpPort,
+  secure: smtpPort === 465,
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
 });
 
+function firstPositive(...values: unknown[]) {
+  for (const value of values) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 0;
+}
+
+function lineQty(item: Record<string, any>) {
+  const qty = Number(item.quantity ?? item.qty ?? item.pcs ?? 1);
+  return Number.isFinite(qty) && qty > 0 ? qty : 1;
+}
+
+/** ERP reserve lines store the sale value as `item_total` / `mrp`. */
+function lineAmount(item: Record<string, any>) {
+  const qty = lineQty(item);
+  const total = firstPositive(
+    item.item_total,
+    item.itemTotal,
+    item.mrp,
+    item.net_amount,
+    item.netAmount,
+    item.line_total,
+    item.total_amount,
+    item.display_price,
+    item.displayPrice,
+    item.price,
+    item.sale_price,
+    item.salePrice,
+    item.amount,
+  );
+  if (total) return total;
+  const unit = firstPositive(item.rate, item.unit_price, item.unitPrice);
+  return unit * qty;
+}
+
+async function sendHtmlMail(to: string, subject: string, html: string, kind: string) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.warn('[mailer] SMTP credentials missing, skipping', kind, 'email');
+    return;
+  }
+  try {
+    await transporter.sendMail({
+      from: process.env.MAIL_FROM || '"Anagha Jewellers" <invoices@anaghajewellers.com>',
+      to,
+      subject,
+      html,
+    });
+    console.log('[mailer] Sent', kind, 'email to', to);
+  } catch (err) {
+    console.error('[mailer] Failed to send', kind, 'email:', err);
+  }
+}
+
+/** Original sales-invoice email after Razorpay payment. Do not reuse for tracking. */
 export async function sendOrderInvoice(session: any, items: any[]) {
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     console.warn('[mailer] SMTP credentials missing, skipping invoice email');
@@ -30,11 +87,12 @@ export async function sendOrderInvoice(session: any, items: any[]) {
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://anaghajewellers.com';
   const { base } = getErpConfig();
-  const pdfLink = session.erpBillId 
-    ? `${base}/public/bills/${encodeURIComponent(session.erpBillId)}/pdf` 
+  const pdfLink = session.erpBillId
+    ? `${base}/public/bills/${encodeURIComponent(session.erpBillId)}/pdf`
     : '#';
 
-  const itemsHtml = items
+  const lineItems = Array.isArray(items) ? items : [];
+  const itemsHtml = lineItems
     .map(
       (item) => `
     <tr>
@@ -44,8 +102,8 @@ export async function sendOrderInvoice(session: any, items: any[]) {
       </td>
       <td style="padding: 8px; border-bottom: 1px solid #000; border-right: 1px solid #000; text-align: center; font-size: 11px;">${item.quantity || 1}</td>
       <td style="padding: 8px; border-bottom: 1px solid #000; border-right: 1px solid #000; text-align: center; font-size: 11px;">7113</td>
-      <td style="padding: 8px; border-bottom: 1px solid #000; border-right: 1px solid #000; text-align: right; font-size: 11px;">₹${Number(item.price || item.display_price || 0).toLocaleString('en-IN')}</td>
-      <td style="padding: 8px; border-bottom: 1px solid #000; text-align: right; font-size: 11px;">₹${Number((item.price || item.display_price || 0) * (item.quantity || 1)).toLocaleString('en-IN')}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #000; border-right: 1px solid #000; text-align: right; font-size: 11px;">₹${lineAmount(item).toLocaleString('en-IN')}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #000; text-align: right; font-size: 11px;">₹${lineAmount(item).toLocaleString('en-IN')}</td>
     </tr>
   `
     )
@@ -117,7 +175,7 @@ export async function sendOrderInvoice(session: any, items: any[]) {
           <table width="100%" cellspacing="0" cellpadding="0" style="border-bottom: 1px solid #000;">
             <tr>
               <td style="padding: 8px; border-right: 1px solid #000; font-size: 10px; font-weight: bold;">TOTAL</td>
-              <td width="50" style="padding: 8px; border-right: 1px solid #000; text-align: center; font-size: 10px;">${items.reduce((sum, item) => sum + (item.quantity || 1), 0)}</td>
+              <td width="50" style="padding: 8px; border-right: 1px solid #000; text-align: center; font-size: 10px;">${lineItems.reduce((sum, item) => sum + (item.quantity || 1), 0)}</td>
               <td width="50" style="padding: 8px; border-right: 1px solid #000;"></td>
               <td width="80" style="padding: 8px; border-right: 1px solid #000;"></td>
               <td width="100" style="padding: 8px; text-align: right; font-size: 11px; font-weight: bold;">₹${totalAmountStr}</td>
@@ -199,6 +257,28 @@ export async function sendOrderInvoice(session: any, items: any[]) {
   }
 }
 
+export async function sendOrderConfirmationEmail(session: any, items: any[] = []) {
+  if (!session.customerEmail) {
+    console.warn('[mailer] No customer email for confirmation', session.id);
+    return;
+  }
+  await sendHtmlMail(
+    session.customerEmail,
+    `Order confirmed — ${orderNumber(session)}`,
+    confirmationHtml(session, items),
+    'confirmation',
+  );
+}
+
+export async function sendOrderTrackingEmail(session: any, items: any[] = []) {
+  if (!session.customerEmail) {
+    console.warn('[mailer] No customer email for tracking', session.id);
+    return;
+  }
+  const mail = htmlForFulfillment(session, items);
+  await sendHtmlMail(session.customerEmail, mail.subject, mail.html, mail.kind);
+}
+
 export async function sendSupportQueryEmail(payload: { name: string; email: string; phone: string; query: string }, targetEmail: string) {
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     console.warn('[mailer] SMTP credentials missing, skipping support email');
@@ -264,4 +344,3 @@ export async function sendSupportQueryEmail(payload: { name: string; email: stri
     throw err;
   }
 }
-

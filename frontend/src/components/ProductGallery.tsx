@@ -63,7 +63,7 @@ export default function ProductGallery({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="relative aspect-square bg-[#f8f9fa] rounded flex items-center justify-center p-8 group">
+      <div className="relative aspect-square w-full max-w-[560px] mx-auto bg-[#f8f9fa] rounded flex items-center justify-center p-4 sm:p-8 group">
         {current ? (
           <img src={current} alt={alt} className="w-full h-full object-contain" />
         ) : (

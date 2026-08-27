@@ -36,6 +36,20 @@ export default function AdminHome() {
       color: 'from-pink-500 to-rose-600',
     },
     {
+      title: 'Orders',
+      desc: 'View paid orders, pack and ship, and add courier tracking for customers.',
+      img: '/images/admin/landing_thumb.png',
+      link: '/upload/orders',
+      color: 'from-blue-500 to-indigo-600',
+    },
+    {
+      title: 'Shipping methods',
+      desc: 'Set delivery options and charges shown at checkout.',
+      img: '/images/admin/landing_thumb.png',
+      link: '/upload/shipping',
+      color: 'from-teal-500 to-emerald-600',
+    },
+    {
       title: 'Legal Policies',
       desc: 'Edit the content for the Privacy Policy and Terms & Conditions pages.',
       img: '/images/admin/landing_thumb.png',

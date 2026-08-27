@@ -1,16 +1,17 @@
 import { Router, type Request, type Response } from 'express';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
 import { checkoutSessions } from '../db/schema.js';
 import { reserveOnErp, releaseOnErp, completeOnErp } from '../lib/erpWebstore.js';
-import { requireCustomer } from '../lib/customerAuth.js';
+import { requireCustomer, requireAdmin } from '../lib/customerAuth.js';
+import { resolveShippingMethod } from './shippingConfig.js';
 import {
   createRazorpayOrder,
   verifyRazorpayPaymentSignature,
   fetchRazorpayPayment,
 } from '../lib/razorpay.js';
-import { sendOrderInvoice } from '../lib/mailer.js';
+import { sendOrderInvoice, sendOrderConfirmationEmail, sendOrderTrackingEmail } from '../lib/mailer.js';
 
 const router = Router();
 
@@ -99,9 +100,28 @@ function billUrlFor(billId: string | null | undefined) {
   return `/bill/${encodeURIComponent(id)}`;
 }
 
+const FULFILLMENT_STATUSES = ['paid', 'packed', 'shipped', 'delivered'] as const;
+
+function asAddressObject(raw: unknown): Record<string, unknown> {
+  if (!raw) return {};
+  if (Array.isArray(raw)) {
+    const rows = raw.filter((row) => row && typeof row === 'object') as Record<string, unknown>[];
+    const preferred = rows.find((row) => row.isDefault) || rows[0];
+    return preferred ? { ...preferred } : {};
+  }
+  if (typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    if (Array.isArray(obj.addresses)) return asAddressObject(obj.addresses);
+    return { ...obj };
+  }
+  return {};
+}
+
 function publicSession(row: typeof checkoutSessions.$inferSelect) {
   const tagNumbers = parseTagNumbers(row.tagNumber);
   const itemNames = itemNamesFromPayload(row.paymentPayload);
+  const itemsAmount = Number(row.itemsAmount ?? row.amount);
+  const shippingAmount = Number(row.shippingAmount || 0);
   return {
     id: row.id,
     status: row.status,
@@ -109,6 +129,10 @@ function publicSession(row: typeof checkoutSessions.$inferSelect) {
     tag_numbers: tagNumbers,
     item_names: itemNames,
     amount: Number(row.amount),
+    items_amount: Number.isFinite(itemsAmount) ? itemsAmount : Number(row.amount),
+    shipping_amount: Number.isFinite(shippingAmount) ? shippingAmount : 0,
+    shipping_method_id: row.shippingMethodId,
+    shipping_method_name: row.shippingMethodName,
     currency: row.currency,
     customer_name: row.customerName,
     customer_mobile: row.customerMobile,
@@ -116,6 +140,13 @@ function publicSession(row: typeof checkoutSessions.$inferSelect) {
     erp_bill_id: row.erpBillId,
     erp_bill_number: row.erpBillNumber,
     bill_url: billUrlFor(row.erpBillId),
+    shipping_address: asAddressObject(row.shippingAddress),
+    courier_name: row.courierName,
+    tracking_number: row.trackingNumber,
+    tracking_url: row.trackingUrl,
+    packed_at: row.packedAt,
+    shipped_at: row.shippedAt,
+    delivered_at: row.deliveredAt,
     expires_at: row.expiresAt,
     created_at: row.createdAt,
     payment_provider: 'razorpay' as const,
@@ -147,7 +178,7 @@ async function finalizePaidSession(sessionId: string, paymentRef: string) {
   const complete = await completeOnErp({
     checkoutSessionId: session.id,
     paymentRef,
-    paidAmount: Number(session.amount),
+    paidAmount: Number(session.itemsAmount || session.amount),
     customer: {
       name: session.customerName,
       mobile: session.customerMobile,
@@ -218,16 +249,31 @@ router.post('/session', requireCustomer, async (req: Request, res: Response) => 
       tags: uniqueTags,
     });
 
-    const amount = Number(reserved.total_amount);
-    if (!Number.isFinite(amount) || amount <= 0) {
+    const itemsAmount = Number(reserved.total_amount);
+    if (!Number.isFinite(itemsAmount) || itemsAmount <= 0) {
       await releaseOnErp(sessionId).catch(() => undefined);
       return res.status(400).json({ error: 'Reserved item has invalid amount' });
     }
+
+    let shipping;
+    try {
+      shipping = await resolveShippingMethod(req.body.shipping_method_id);
+    } catch (shipErr) {
+      await releaseOnErp(sessionId).catch(() => undefined);
+      throw shipErr;
+    }
+    const shippingAmount = Number(shipping.charge) || 0;
+    const amount = itemsAmount + shippingAmount;
+
+    const selectedAddress = asAddressObject(
+      req.body.shippingAddress || customer.shippingAddress,
+    );
 
     const lines = Array.isArray(reserved.items) ? reserved.items : [];
     const line = lines[0];
     const expiresAt = reserved.expires_at ? new Date(reserved.expires_at) : null;
     const tagKey = uniqueTags.join('|');
+    const addressJson = JSON.stringify(selectedAddress);
 
     try {
       await db.insert(checkoutSessions).values({
@@ -236,12 +282,16 @@ router.post('/session', requireCustomer, async (req: Request, res: Response) => 
         tagNumber: tagKey,
         inventoryId: line?.inventory_id || null,
         amount: String(amount),
+        itemsAmount: String(itemsAmount),
+        shippingAmount: String(shippingAmount),
+        shippingMethodId: shipping.id,
+        shippingMethodName: shipping.name,
         currency: 'INR',
         websiteCustomerId: customer.id,
         customerName: name,
         customerMobile: mobile,
         customerEmail: email || null,
-        shippingAddress: customer.shippingAddress || {},
+        shippingAddress: sql`${addressJson}::jsonb`,
         paymentPayload: { cart_tags: uniqueTags, items: lines },
         expiresAt,
       });
@@ -253,6 +303,7 @@ router.post('/session', requireCustomer, async (req: Request, res: Response) => 
         notes: {
           tag_number: uniqueTags[0],
           tag_count: String(uniqueTags.length),
+          shipping_method: shipping.id,
         },
         customer: {
           name,
@@ -313,7 +364,7 @@ router.get('/my-orders', requireCustomer, async (req: Request, res: Response) =>
       .where(
         and(
           eq(checkoutSessions.websiteCustomerId, customer.id),
-          eq(checkoutSessions.status, 'paid'),
+          inArray(checkoutSessions.status, [...FULFILLMENT_STATUSES]),
         ),
       )
       .orderBy(desc(checkoutSessions.createdAt))
@@ -428,15 +479,10 @@ router.post('/session/:id/confirm-razorpay', async (req: Request, res: Response)
       console.warn('[razorpay] payment fetch failed after signature ok', fetchErr);
     }
 
+    const wasUnpaid = session.status !== 'paid';
     const updated = await finalizePaidSession(session.id, paymentId);
-    
-    if (updated.customerEmail) {
-      const prevPayload = typeof updated.paymentPayload === 'object' ? (updated.paymentPayload as any) : {};
-      const items = Array.isArray(prevPayload.items) ? prevPayload.items : [];
-      sendOrderInvoice(updated, items).catch(err => {
-        console.error('[checkout] Error triggering invoice email', err);
-      });
-    }
+
+    if (wasUnpaid) queuePaidEmails(updated);
 
     res.json({ data: publicSession(updated) });
   } catch (err) {
@@ -465,6 +511,124 @@ router.get('/session/:id/payment', async (req: Request, res: Response) => {
         ? session.paymentPayload
         : null;
     res.json({ data: { session: publicSession(session), payment } });
+  } catch (err) {
+    handle(err, res);
+  }
+});
+
+const STATUS_RANK: Record<string, number> = {
+  paid: 0,
+  packed: 1,
+  shipped: 2,
+  delivered: 3,
+};
+
+function itemsFromSession(session: typeof checkoutSessions.$inferSelect) {
+  const payload = session.paymentPayload && typeof session.paymentPayload === 'object'
+    ? (session.paymentPayload as Record<string, unknown>)
+    : {};
+  return Array.isArray(payload.items) ? payload.items : [];
+}
+
+function queuePaidEmails(session: typeof checkoutSessions.$inferSelect | undefined) {
+  if (!session?.customerEmail) {
+    console.warn('[checkout] skip paid emails — no customer email', session?.id);
+    return;
+  }
+  const items = itemsFromSession(session);
+  console.log('[checkout] sending invoice + confirmation to', session.customerEmail, 'order', session.id);
+  sendOrderInvoice(session, items)
+    .then(() => sendOrderConfirmationEmail(session, items))
+    .catch((err) => {
+      console.error('[checkout] paid emails failed', err);
+    });
+}
+
+function queueTrackingEmail(session: typeof checkoutSessions.$inferSelect | undefined) {
+  if (!session?.customerEmail) {
+    console.warn('[checkout] skip tracking email — no customer email', session?.id);
+    return;
+  }
+  console.log('[checkout] sending tracking email to', session.customerEmail, 'status', session.status, 'order', session.id);
+  sendOrderTrackingEmail(session, itemsFromSession(session)).catch((err) => {
+    console.error('[checkout] tracking email failed', err);
+  });
+}
+
+/** GET /api/checkout/admin/orders — paid + fulfillment queue */
+router.get('/admin/orders', requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const rows = await db
+      .select()
+      .from(checkoutSessions)
+      .where(inArray(checkoutSessions.status, [...FULFILLMENT_STATUSES]))
+      .orderBy(desc(checkoutSessions.createdAt))
+      .limit(200);
+    res.json({ data: rows.map(publicSession) });
+  } catch (err) {
+    handle(err, res);
+  }
+});
+
+/** PATCH /api/checkout/admin/orders/:id — pack / ship / deliver + tracking */
+router.patch('/admin/orders/:id', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const rows = await db
+      .select()
+      .from(checkoutSessions)
+      .where(eq(checkoutSessions.id, paramId(req)))
+      .limit(1);
+    const session = rows[0];
+    if (!session) return res.status(404).json({ error: 'Order not found' });
+    if (!FULFILLMENT_STATUSES.includes(session.status as (typeof FULFILLMENT_STATUSES)[number])) {
+      return res.status(409).json({ error: `Order cannot be fulfilled from status ${session.status}` });
+    }
+
+    const nextStatus = String(req.body.status || session.status).trim();
+    if (!FULFILLMENT_STATUSES.includes(nextStatus as (typeof FULFILLMENT_STATUSES)[number])) {
+      return res.status(400).json({ error: 'Invalid fulfillment status' });
+    }
+    if ((STATUS_RANK[nextStatus] ?? -1) < (STATUS_RANK[session.status] ?? 0)) {
+      return res.status(400).json({ error: 'Cannot move an order backward' });
+    }
+
+    const courierName =
+      req.body.courier_name !== undefined
+        ? String(req.body.courier_name || '').trim() || null
+        : session.courierName;
+    const trackingNumber =
+      req.body.tracking_number !== undefined
+        ? String(req.body.tracking_number || '').trim() || null
+        : session.trackingNumber;
+    const trackingUrl =
+      req.body.tracking_url !== undefined
+        ? String(req.body.tracking_url || '').trim() || null
+        : session.trackingUrl;
+
+    const now = new Date();
+    const [updated] = await db
+      .update(checkoutSessions)
+      .set({
+        status: nextStatus,
+        courierName,
+        trackingNumber,
+        trackingUrl,
+        packedAt: (STATUS_RANK[nextStatus] ?? 0) >= 1 ? session.packedAt || now : session.packedAt,
+        shippedAt: (STATUS_RANK[nextStatus] ?? 0) >= 2 ? session.shippedAt || now : session.shippedAt,
+        deliveredAt: (STATUS_RANK[nextStatus] ?? 0) >= 3 ? session.deliveredAt || now : session.deliveredAt,
+        updatedAt: now,
+      })
+      .where(eq(checkoutSessions.id, session.id))
+      .returning();
+
+    const statusChanged = nextStatus !== session.status;
+    const trackingChanged =
+      courierName !== session.courierName ||
+      trackingNumber !== session.trackingNumber ||
+      trackingUrl !== session.trackingUrl;
+    if (statusChanged || trackingChanged) queueTrackingEmail(updated);
+
+    res.json({ data: publicSession(updated) });
   } catch (err) {
     handle(err, res);
   }

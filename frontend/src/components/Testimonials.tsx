@@ -46,7 +46,7 @@ export default function Testimonials({ live }: Props) {
   }, []);
 
   return (
-    <section className="bg-white pt-16 pb-4 relative overflow-hidden">
+    <section className="bg-white pt-8 sm:pt-16 pb-4 relative overflow-hidden">
       <motion.div 
         initial="hidden"
         whileInView="visible"
@@ -59,7 +59,7 @@ export default function Testimonials({ live }: Props) {
             hidden: { opacity: 0, y: 40 },
             visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: "easeOut" } }
           }}
-          className="text-center text-[28px] font-domine text-[#032C5E] tracking-wide mb-6"
+          className="text-center text-[22px] sm:text-[28px] font-domine text-[#032C5E] tracking-wide mb-6 px-4"
         >
           Customer Testimonials
         </motion.h2>
@@ -72,13 +72,13 @@ export default function Testimonials({ live }: Props) {
           }}
           ref={scrollRef}
           onScroll={handleScroll}
-          className="flex gap-10 overflow-x-auto pb-16 pt-10 px-8 lg:px-12 snap-x snap-mandatory z-10 relative scrollbar-hide"
+          className="flex gap-6 sm:gap-10 overflow-x-auto pb-16 pt-10 px-4 sm:px-8 lg:px-12 snap-x snap-mandatory z-10 relative scrollbar-hide"
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
           {items.map((item, idx) => (
             <div 
               key={idx} 
-              className={`relative min-w-[280px] w-[280px] shrink-0 snap-center transition-transform hover:scale-105 duration-300 ${item.rotate} ${item.translateY} shadow-lg rounded-sm`}
+              className={`relative min-w-[min(280px,82vw)] w-[min(280px,82vw)] shrink-0 snap-center transition-transform hover:scale-105 duration-300 ${item.rotate} ${item.translateY} shadow-lg rounded-sm`}
               style={{ backgroundColor: '#ffeff3' }}
             >
               {/* Pin */}
