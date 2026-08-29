@@ -3,15 +3,17 @@ import { Pool, type QueryResultRow } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import * as schema from './schema.js';
 
-if (!process.env.DATABASE_URL) {
-  throw new Error(
-    'DATABASE_URL is not set. Copy backend/.env.example to backend/.env and paste your Postgres connection string.',
+const connectionString = String(process.env.DATABASE_URL || '').trim();
+if (!connectionString) {
+  console.error(
+    '[db] DATABASE_URL is not set. Add it on Cloud Run → Edit & deploy → Variables. The process will still listen on PORT.',
   );
 }
 
 export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: connectionString || 'postgresql://127.0.0.1:9/unset',
   max: 10,
+  connectionTimeoutMillis: 10_000,
 });
 
 export const db = drizzle(pool, { schema });
