@@ -133,7 +133,7 @@ app.use(
   },
 );
 
-app.listen(PORT, () => {
-  console.log(`Anagha API listening on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Anagha API listening on 0.0.0.0:${PORT}`);
   console.log(`Uploads directory: ${path.resolve(__dirname, '..', 'uploads')}`);
 });

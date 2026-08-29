@@ -25,6 +25,7 @@ RUN apt-get update \
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
+RUN mkdir -p /app/uploads && chown -R appuser:nodejs /app
 
 USER appuser
 EXPOSE 8080
