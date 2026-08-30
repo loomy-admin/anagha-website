@@ -33,6 +33,9 @@ yarn-error.log*
 .env
 .env.*
 !.env.example
+env-backend.yaml
+anagha.dump
+cloud-sql-proxy.exe
 
 # backend uploads
 backend/uploads/*

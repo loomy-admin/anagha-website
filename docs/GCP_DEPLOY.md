@@ -534,11 +534,95 @@ Without `GCS_BUCKET`, uploads still write to `backend/uploads` and are served at
 
 ---
 
+## 16. GitHub Actions — build-time env (required for Next rewrites)
+
+Cloud Run **runtime** env cannot fix Next.js `rewrites()` — those bake `BACKEND_URL` at **`next build`** inside the Docker image. Put public build URLs in **GitHub Actions variables**; keep DB/payment secrets only on Cloud Run.
+
+Workflow: [`.github/workflows/deploy-gcp.yml`](../.github/workflows/deploy-gcp.yml)
+
+| Kind | Where | Examples |
+| --- | --- | --- |
+| **Build-time** (GitHub → `docker build --build-arg`) | GitHub **Variables** | `BACKEND_URL`, `NEXT_PUBLIC_BASE_URL`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID` |
+| **Runtime** (Cloud Run service env / secrets) | Cloud Run console | `DATABASE_URL`, `SESSION_SECRET`, `CORS_ORIGIN`, `RAZORPAY_*`, `GCS_*` |
+| **Auth to GCP** | GitHub **Secrets** | WIF provider + deploy service account (below) |
+
+### One-time: Workload Identity Federation (no JSON key)
+
+Replace `GITHUB_ORG` / `GITHUB_REPO` with your GitHub org/user and repo name.
+
+```powershell
+$PROJECT_ID = "anagha-jewellers"
+$PROJECT_NUMBER = (gcloud projects describe $PROJECT_ID --format="value(projectNumber)")
+$POOL = "github-pool"
+$PROVIDER = "github-provider"
+$SA = "github-deploy@$PROJECT_ID.iam.gserviceaccount.com"
+$REPO = "GITHUB_ORG/GITHUB_REPO"   # e.g. anaghajewellers/anagha-website
+
+gcloud services enable iamcredentials.googleapis.com sts.googleapis.com artifactregistry.googleapis.com run.googleapis.com
+
+gcloud iam service-accounts create github-deploy --display-name="GitHub Actions deploy" 2>$null
+
+gcloud iam workload-identity-pools create $POOL `
+  --location=global `
+  --display-name="GitHub Actions"
+
+gcloud iam workload-identity-pools providers create-oidc $PROVIDER `
+  --location=global `
+  --workload-identity-pool=$POOL `
+  --display-name="GitHub" `
+  --issuer-uri="https://token.actions.githubusercontent.com" `
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.actor=assertion.actor" `
+  --attribute-condition="assertion.repository=='$REPO'"
+
+# Roles for build + deploy (tighten later if you want)
+foreach ($role in @(
+  "roles/run.admin",
+  "roles/artifactregistry.writer",
+  "roles/iam.serviceAccountUser",
+  "roles/storage.admin"
+)) {
+  gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$SA" --role=$role --quiet
+}
+
+$PROVIDER_RESOURCE = "projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL/providers/$PROVIDER"
+gcloud iam service-accounts add-iam-policy-binding $SA `
+  --role="roles/iam.workloadIdentityUser" `
+  --member="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL/attribute.repository/$REPO"
+
+Write-Host "Set GitHub secret GCP_WORKLOAD_IDENTITY_PROVIDER = $PROVIDER_RESOURCE"
+Write-Host "Set GitHub secret GCP_SERVICE_ACCOUNT = $SA"
+```
+
+### GitHub repository settings
+
+**Settings → Secrets and variables → Actions**
+
+| Name | Type | Example value |
+| --- | --- | --- |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Secret | `projects/646499775904/locations/global/workloadIdentityPools/github-pool/providers/github-provider` |
+| `GCP_SERVICE_ACCOUNT` | Secret | `github-deploy@anagha-jewellers.iam.gserviceaccount.com` |
+| `GCP_PROJECT_ID` | Variable | `anagha-jewellers` |
+| `BACKEND_URL` | Variable | `https://api.anaghajewellers.com` |
+| `NEXT_PUBLIC_BASE_URL` | Variable | `https://anaghajewellers.com` |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Variable (optional) | your OAuth client ID |
+
+Then run **Actions → Deploy GCP → Run workflow**, or push to `main` under `frontend/` / `backend/`.
+
+After a successful frontend deploy:
+
+```powershell
+curl.exe -sI https://anaghajewellers.com/api/auth/me
+# expect 401 from Express, not 500 HTML
+```
+
+---
+
 ## Useful file map
 
 | Path | Role |
 | --- | --- |
-| [frontend/Dockerfile](../frontend/Dockerfile) | Next.js standalone image |
+| [frontend/Dockerfile](../frontend/Dockerfile) | Next.js standalone image (`ARG BACKEND_URL` at build) |
 | [backend/Dockerfile](../backend/Dockerfile) | Express image |
+| [.github/workflows/deploy-gcp.yml](../.github/workflows/deploy-gcp.yml) | CI: build-args → AR → Cloud Run |
 | [backend/src/db/index.ts](../backend/src/db/index.ts) | `pg` pool (Cloud SQL + Neon TCP both work) |
 | [backend/src/lib/objectStorage.ts](../backend/src/lib/objectStorage.ts) | GCS + local `/uploads` |

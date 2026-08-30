@@ -1,0 +1,115 @@
+# Build images with BUILD-TIME env (Next rewrites), push to Artifact Registry, deploy Cloud Run.
+# Runtime secrets (DATABASE_URL, SESSION_SECRET, etc.) stay on Cloud Run — not in this workflow.
+#
+# Required GitHub configuration (see docs/GCP_DEPLOY.md §16):
+#   Secrets:  GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_SERVICE_ACCOUNT
+#   Vars:     GCP_PROJECT_ID, BACKEND_URL, NEXT_PUBLIC_BASE_URL
+#   Optional: NEXT_PUBLIC_GOOGLE_CLIENT_ID (var or secret)
+
+name: Deploy GCP
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - '.github/workflows/deploy-gcp.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  REGION: asia-south1
+  AR_REPO: cloud-run-source-deploy/anagha-website
+
+jobs:
+  deploy-backend:
+    name: Backend → Cloud Run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build & push backend
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/anagha-backend
+        run: |
+          docker build -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" ./backend
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+      - name: Deploy backend
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/anagha-backend
+        run: |
+          gcloud run deploy anagha-backend \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --image="${IMAGE}:${{ github.sha }}" \
+            --port=8080 \
+            --allow-unauthenticated \
+            --add-cloudsql-instances="${{ vars.GCP_PROJECT_ID }}:asia-south1:anagha-pg"
+
+  deploy-frontend:
+    name: Frontend → Cloud Run
+    runs-on: ubuntu-latest
+    needs: []
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build & push frontend (bake BACKEND_URL into Next rewrites)
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/anagha-frontend
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+          NEXT_PUBLIC_BASE_URL: ${{ vars.NEXT_PUBLIC_BASE_URL }}
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
+        run: |
+          if [ -z "$BACKEND_URL" ]; then
+            echo "Missing repository variable BACKEND_URL (e.g. https://api.anaghajewellers.com)"
+            exit 1
+          fi
+          docker build \
+            --build-arg "BACKEND_URL=${BACKEND_URL}" \
+            --build-arg "NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}" \
+            --build-arg "NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}" \
+            -t "${IMAGE}:${{ github.sha }}" \
+            -t "${IMAGE}:latest" \
+            ./frontend
+          docker push "${IMAGE}:${{ github.sha }}"
+          docker push "${IMAGE}:latest"
+
+      - name: Deploy frontend
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/anagha-frontend
+        run: |
+          gcloud run deploy anagha-frontend \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --image="${IMAGE}:${{ github.sha }}" \
+            --port=8080 \
+            --allow-unauthenticated \
+            --update-env-vars="BACKEND_URL=${{ vars.BACKEND_URL }},NEXT_PUBLIC_BASE_URL=${{ vars.NEXT_PUBLIC_BASE_URL }}"

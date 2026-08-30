@@ -11,7 +11,9 @@ anagha-website/
 ```
 
 
-Production hosting is **GCP only** (Cloud Run + Cloud SQL + Cloud Storage). Follow [docs/GCP_DEPLOY.md](docs/GCP_DEPLOY.md). Local Dockerfiles: `frontend/Dockerfile`, `backend/Dockerfile`.
+Production hosting is **GCP only** (Cloud Run + Cloud SQL + Cloud Storage). Follow [docs/GCP_DEPLOY.md](docs/GCP_DEPLOY.md).
+
+**Deploy note:** Next.js `BACKEND_URL` is baked at **image build** (not Cloud Run runtime). CI uses GitHub Actions with repository variables (`BACKEND_URL`, `NEXT_PUBLIC_BASE_URL`) — see [docs/GCP_DEPLOY.md §16](docs/GCP_DEPLOY.md) and [`.github/workflows/deploy-gcp.yml`](.github/workflows/deploy-gcp.yml). Runtime secrets (`DATABASE_URL`, Razorpay, etc.) stay on Cloud Run only.
 
 ## Setup
 
