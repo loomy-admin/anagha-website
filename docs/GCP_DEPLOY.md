@@ -606,7 +606,7 @@ Write-Host "Set GitHub secret GCP_SERVICE_ACCOUNT = $SA"
 | `NEXT_PUBLIC_BASE_URL` | Variable | `https://anaghajewellers.com` |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Variable (optional but recommended) | OAuth web client ID — **must be a build-arg**; empty value can break the login page in some browsers |
 
-Then run **Actions → Deploy GCP → Run workflow**, or push to `main` under `frontend/` / `backend/`.
+Then run **Actions → Deploy GCP → Run workflow**, or push to **`master`** under `frontend/` / `backend/` (auto build + deploy).
 
 After a successful frontend deploy:
 
