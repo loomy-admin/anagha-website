@@ -20,7 +20,14 @@ type Props = {
   onError: () => void;
 };
 
-export default function GoogleContinueButton({
+/** Renders nothing when Google client ID was not baked at build time (avoids crashing login). */
+export default function GoogleContinueButton(props: Props) {
+  const clientId = String(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '').trim();
+  if (!clientId) return null;
+  return <GoogleContinueButtonInner {...props} />;
+}
+
+function GoogleContinueButtonInner({
   label = 'Continue with Google',
   disabled,
   onSuccess,

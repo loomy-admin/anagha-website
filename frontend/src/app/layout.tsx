@@ -20,12 +20,16 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const googleClientId = String(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '').trim();
+
   return (
     <html lang="en">
       <body className="antialiased overflow-x-clip">
-        <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ''}>
-          {children}
-        </GoogleOAuthProvider>
+        {googleClientId ? (
+          <GoogleOAuthProvider clientId={googleClientId}>{children}</GoogleOAuthProvider>
+        ) : (
+          children
+        )}
       </body>
     </html>
   );

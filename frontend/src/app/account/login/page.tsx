@@ -69,11 +69,15 @@ function LoginForm() {
         />
       </div>
 
-      <div className="my-6 flex items-center gap-3">
-        <div className="h-px flex-1 bg-gray-200" />
-        <span className="text-[11px] uppercase tracking-[0.18em] text-gray-400">or</span>
-        <div className="h-px flex-1 bg-gray-200" />
-      </div>
+      {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? (
+        <div className="my-6 flex items-center gap-3">
+          <div className="h-px flex-1 bg-gray-200" />
+          <span className="text-[11px] uppercase tracking-[0.18em] text-gray-400">or</span>
+          <div className="h-px flex-1 bg-gray-200" />
+        </div>
+      ) : (
+        <div className="my-6" />
+      )}
 
       <form onSubmit={onSubmit} className="space-y-4">
         <label className="block">
