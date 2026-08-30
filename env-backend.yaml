@@ -1,0 +1,4 @@
+﻿CORS_ORIGIN: "https://anaghajewellers.com,https://www.anaghajewellers.com"
+PUBLIC_BASE_URL: "https://anaghajewellers.com"
+PUBLIC_API_BASE_URL: "https://api.anaghajewellers.com"
+COOKIE_SECURE: "true"

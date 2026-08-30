@@ -19,6 +19,33 @@ Replace `YOUR_PROJECT_ID` everywhere below.
 
 ---
 
+## Live production snapshot
+
+Project: **`anagha-jewellers`** · Region: **`asia-south1`**
+
+| Resource | Value |
+| --- | --- |
+| Cloud SQL connection name | `anagha-jewellers:asia-south1:anagha-pg` |
+| Database | `anagha` |
+| GCS bucket | `gs://anagha-website-assets` (public `allUsers` objectViewer) |
+| Backend Cloud Run | `anagha-backend` → `https://anagha-backend-jc4alta5gq-el.a.run.app` (also `…-646499775904.asia-south1.run.app`) |
+| Frontend Cloud Run | `anagha-frontend` → `https://anagha-frontend-646499775904.asia-south1.run.app` |
+| Public site | `https://anaghajewellers.com` / `https://www.anaghajewellers.com` |
+| Public API | `https://api.anaghajewellers.com` |
+| DNS / TLS edge | Cloudflare (proxied CNAMEs + **Worker** host rewrite — see §13) |
+| Data | Neon dump restored into Cloud SQL (`cached_catalog_items` ~1600 rows) |
+
+**Verified smoke (public):**
+
+- `GET https://api.anaghajewellers.com/health` → `{"ok":true,"service":"anagha-backend"}`
+- `GET https://api.anaghajewellers.com/api/catalog?limit=1` → catalog JSON from Cloud SQL
+- `GET https://anaghajewellers.com` / `www` → Next.js **200**
+- Nameservers → `clara.ns.cloudflare.com` / `jonah.ns.cloudflare.com`
+
+**Known follow-up:** `GET https://anaghajewellers.com/api/...` can **500** until the frontend image is **rebuilt** with `BACKEND_URL=https://api.anaghajewellers.com` (Next rewrites bake that URL at build time; runtime env alone is not enough). Direct `api.` host works.
+
+---
+
 ## 1. Prerequisites
 
 On your laptop:
@@ -60,7 +87,7 @@ Console: **SQL → Create instance**
 
 | Setting | Value |
 | --- | --- |
-| Database engine | PostgreSQL **16** |
+| Database engine | PostgreSQL **16** (or **18** — both fine with this app) |
 | Instance ID | `anagha-pg` |
 | Password | generate a strong password and save it |
 | Region | `asia-south1` |
@@ -113,14 +140,18 @@ Console: **Cloud Storage → Create bucket**
 Public read (console: bucket **Permissions**, or):
 
 ```powershell
-gsutil iam ch allUsers:objectViewer gs://anagha-website-assets
+gcloud storage buckets add-iam-policy-binding gs://anagha-website-assets `
+  --member=allUsers `
+  --role=roles/storage.objectViewer
 ```
+
+If you get **412** / `do not belong to a permitted customer`, the org policy **Domain restricted sharing** (`iam.allowedPolicyMemberDomains`) is blocking `allUsers`. On the project, set that constraint to **Google-managed default** (or allow public principals), wait a minute, then retry the IAM binding.
 
 Optional CORS (only if the browser loads objects directly and you see CORS errors):
 
 ```powershell
 @"
-[{"origin":["https://YOUR-FRONTEND.run.app","http://localhost:3000"],"method":["GET","HEAD"],"responseHeader":["Content-Type"],"maxAgeSeconds":3600}]
+[{"origin":["https://anaghajewellers.com","https://www.anaghajewellers.com","http://localhost:3000"],"method":["GET","HEAD"],"responseHeader":["Content-Type"],"maxAgeSeconds":3600}]
 "@ | Set-Content -Encoding utf8 cors.json
 gsutil cors set cors.json gs://anagha-website-assets
 ```
@@ -164,6 +195,12 @@ Grant:
 | **Cloud SQL Client** | Unix socket to Cloud SQL |
 | **Storage Object Admin** | Upload CMS + catalog images to the bucket |
 
+```powershell
+gcloud projects add-iam-policy-binding anagha-jewellers `
+  --member="serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com" `
+  --role="roles/cloudsql.client"
+```
+
 No JSON key download. On Cloud Run leave `GCS_CLIENT_EMAIL` and `GCS_PRIVATE_KEY` unset.
 
 Optional: **Secret Manager Secret Accessor** if you store DB/Razorpay/SMTP secrets there.
@@ -194,11 +231,14 @@ npx tsx src/scripts/relocateCatalogImages.ts
 
 ## 8. Move data Neon → Cloud SQL
 
-With Cloud SQL Auth Proxy running:
+With Cloud SQL Auth Proxy running (and `pg_dump` / `pg_restore` on `PATH` — on Windows often `D:\Postgressql\bin` or `C:\Program Files\PostgreSQL\16\bin`):
 
 ```powershell
-# Dump Neon (use your current Neon URL)
+# Dump Neon (use your current Neon URL; prefer non-pooler host if dump fails)
 pg_dump --no-owner --no-acl -Fc -f anagha.dump "postgresql://neondb_owner:PASSWORD@HOST/neondb?sslmode=require"
+
+# Prefer an EMPTY database. If you already ran db:migrate, drop/recreate `anagha` first
+# so pg_restore does not hit "already exists" / duplicate-key noise.
 
 # Restore into Cloud SQL (proxy on 5432)
 pg_restore --no-owner --no-acl -d "postgresql://USER:PASSWORD@127.0.0.1:5432/anagha" anagha.dump
@@ -213,6 +253,12 @@ npm run db:migrate
 ```
 
 Skip `db:seed` if you restored real data.
+
+Quick row check:
+
+```powershell
+psql "postgresql://USER:PASSWORD@127.0.0.1:5432/anagha" -c "SELECT count(*) FROM cached_catalog_items;"
+```
 
 ---
 
@@ -275,9 +321,9 @@ Health check path: `/health` (startup probe).
 | `DATABASE_URL` | Unix socket URL from section 3 |
 | `SESSION_SECRET` | ≥16 random chars |
 | `COOKIE_SECURE` | `true` |
-| `CORS_ORIGIN` | frontend `https://anagha-frontend-xxxxx.asia-south1.run.app` (comma-separated if you add a custom domain) |
-| `PUBLIC_BASE_URL` | **frontend** public URL |
-| `PUBLIC_API_BASE_URL` | **backend** public URL (`https://anagha-backend-xxxxx.asia-south1.run.app`) |
+| `CORS_ORIGIN` | `https://anaghajewellers.com\,https://www.anaghajewellers.com` (escape `,` as `\,` for `gcloud --update-env-vars`) |
+| `PUBLIC_BASE_URL` | **frontend** public URL (`https://anaghajewellers.com`) |
+| `PUBLIC_API_BASE_URL` | **backend** public URL (`https://api.anaghajewellers.com`) |
 | `GCS_BUCKET` | `anagha-website-assets` |
 | `GCS_PUBLIC_BASE_URL` | `https://storage.googleapis.com/anagha-website-assets` |
 | `GCS_PROJECT_ID` | `YOUR_PROJECT_ID` |
@@ -307,13 +353,23 @@ gcloud run deploy anagha-backend `
 
 Prefer `--set-secrets` / console **Secrets** for `DATABASE_URL`, `SESSION_SECRET`, `RAZORPAY_KEY_SECRET`, `SMTP_PASS`.
 
-Smoke:
+Smoke (PowerShell: use `curl.exe`, not the `curl` alias):
 
 ```powershell
-curl https://anagha-backend-xxxxx.asia-south1.run.app/health
+curl.exe -s https://api.anaghajewellers.com/health
+curl.exe -s "https://api.anaghajewellers.com/api/catalog?limit=2"
 ```
 
-Expect `{"ok":true,"service":"anagha-backend"}`.
+Expect `{"ok":true,"service":"anagha-backend"}` and catalog JSON.
+
+Update backend env after custom domains (note `\,` in `CORS_ORIGIN`):
+
+```powershell
+gcloud run services update anagha-backend `
+  --region=asia-south1 `
+  --add-cloudsql-instances=anagha-jewellers:asia-south1:anagha-pg `
+  --update-env-vars="COOKIE_SECURE=true,CORS_ORIGIN=https://anaghajewellers.com\,https://www.anaghajewellers.com,PUBLIC_BASE_URL=https://anaghajewellers.com,PUBLIC_API_BASE_URL=https://api.anaghajewellers.com,GCS_BUCKET=anagha-website-assets,GCS_PUBLIC_BASE_URL=https://storage.googleapis.com/anagha-website-assets,GCS_PROJECT_ID=anagha-jewellers,GCS_MAKE_PUBLIC=true"
+```
 
 ---
 
@@ -332,51 +388,118 @@ Expect `{"ok":true,"service":"anagha-backend"}`.
 
 | Variable | Why |
 | --- | --- |
-| `BACKEND_URL` | SSR `fetch` to the API (same value as the Docker **build-arg**) |
-| `NEXT_PUBLIC_BASE_URL` | already baked at build; runtime copy is harmless |
+| `BACKEND_URL` | SSR `fetch` + must match Docker **build-arg** for Next rewrites |
+| `NEXT_PUBLIC_BASE_URL` | public site origin (`https://anaghajewellers.com`) |
 
 ```powershell
-gcloud run deploy anagha-frontend `
-  --region asia-south1 `
-  --image asia-south1-docker.pkg.dev/YOUR_PROJECT_ID/anagha/frontend:latest `
-  --port 8080 `
-  --allow-unauthenticated `
-  --set-env-vars "BACKEND_URL=https://anagha-backend-xxxxx.asia-south1.run.app"
+gcloud run services update anagha-frontend `
+  --region=asia-south1 `
+  --update-env-vars="BACKEND_URL=https://api.anaghajewellers.com,NEXT_PUBLIC_BASE_URL=https://anaghajewellers.com"
 ```
 
-Open the frontend URL. The browser talks only to the frontend origin; Next proxies `/api/*` and `/uploads/*` to the backend.
+Rebuild when `BACKEND_URL` changes (rewrites are compile-time):
+
+```powershell
+docker build `
+  --build-arg BACKEND_URL=https://api.anaghajewellers.com `
+  --build-arg NEXT_PUBLIC_BASE_URL=https://anaghajewellers.com `
+  -t asia-south1-docker.pkg.dev/anagha-jewellers/cloud-run-source-deploy/anagha-website/anagha-frontend:latest `
+  .\frontend
+```
+
+Open the site. The browser uses `anaghajewellers.com`; Next can proxy `/api/*` and `/uploads/*` to the backend once rewrites point at `https://api.anaghajewellers.com`.
 
 ---
 
 ## 12. Smoke tests
 
-1. `GET` backend `/health`
-2. Homepage loads (hero, categories, offers)
-3. Sign up / login (cookie on the frontend host)
-4. Admin `/upload` — upload a hero or offer image; confirm the object appears in the GCS bucket and the storefront shows it
-5. Catalog listing + product page
-6. Checkout (Razorpay test card) if keys are set
-7. Re-import ERP from admin (long request; 300s timeout)
+```powershell
+curl.exe -s https://api.anaghajewellers.com/health
+curl.exe -s "https://api.anaghajewellers.com/api/catalog?limit=2"
+curl.exe -sI https://anaghajewellers.com
+curl.exe -sI https://www.anaghajewellers.com
+curl.exe -sI "https://anaghajewellers.com/api/catalog?limit=1"   # needs rebuilt frontend
+```
+
+Manual:
+
+1. Homepage loads (hero, categories, offers)
+2. Sign up / login (cookie on `anaghajewellers.com`)
+3. Admin `/upload` — upload image; object appears in GCS and storefront shows it
+4. Catalog listing + product page
+5. Checkout (Razorpay test card) if keys are set
+6. Re-import ERP from admin (long request; 300s timeout)
 
 ---
 
-## 13. Custom domain (optional)
+## 13. Custom domain via Cloudflare (current approach)
 
-Cloud Run → service → **Custom domains** (or a HTTPS load balancer + Cloud DNS).
+Cloud Run **domain mapping** is optional. This project uses **Cloudflare Free** as the public edge:
 
-After DNS is live:
+| Host | DNS | Proxy |
+| --- | --- | --- |
+| `anaghajewellers.com` | CNAME → `anagha-frontend-….run.app` | Proxied |
+| `www` | CNAME → same frontend | Proxied |
+| `api` | CNAME → `anagha-backend-….run.app` | Proxied |
 
-1. Add the domain to backend `CORS_ORIGIN` and `PUBLIC_BASE_URL`
-2. Rebuild frontend with `BACKEND_URL` still pointing at the backend (custom API host or `*.run.app`)
+CNAME **target = hostname only** (no `https://`).
+
+Registrar nameservers must be Cloudflare (`clara` / `jonah.ns.cloudflare.com`), not Hostinger parking.
+
+### Why a Worker is required (Free plan)
+
+A proxied CNAME alone sends `Host: anaghajewellers.com` to Cloud Run → Google **404**. Origin Rule **Host header rewrite** is not available on Free. Use a **Worker** that `fetch`es the `*.run.app` origin (correct Host) while the browser URL stays on your domain.
+
+Worker routes (minimum):
+
+```text
+anaghajewellers.com/*
+www.anaghajewellers.com/*
+api.anaghajewellers.com/*
+```
+
+(`*.anaghajewellers.com/*` alone does **not** cover the apex.)
+
+Sketch (site + API in one Worker):
+
+```js
+const FRONTEND = "anagha-frontend-646499775904.asia-south1.run.app";
+const BACKEND = "anagha-backend-jc4alta5gq-el.a.run.app";
+
+export default {
+  async fetch(request) {
+    const incoming = new URL(request.url);
+    const originHost =
+      incoming.hostname === "api.anaghajewellers.com" ? BACKEND : FRONTEND;
+    const url = new URL(request.url);
+    url.hostname = originHost;
+    const init = { method: request.method, headers: request.headers, redirect: "manual" };
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      init.body = request.body;
+      init.duplex = "half";
+    }
+    return fetch(url.toString(), init);
+  },
+};
+```
+
+Cloudflare **SSL/TLS**: Full or Full strict. Do **not** use a Redirect Rule to `*.run.app` if you want the site served on your domain.
+
+After DNS + Worker:
+
+1. Set backend `CORS_ORIGIN`, `PUBLIC_BASE_URL`, `PUBLIC_API_BASE_URL` (see §10)
+2. Rebuild frontend with `BACKEND_URL=https://api.anaghajewellers.com`
 3. Update Google OAuth authorized origins / redirect URIs
 4. Update Razorpay allowed URLs if required
+
+Alternatives: Cloud Run domain mapping + `ghs.googlehosted.com`, or GCP HTTPS Load Balancer.
 
 ---
 
 ## 14. Cut over from Vercel + Render
 
-1. Confirm GCP site works end-to-end
-2. Point the public domain at Cloud Run
+1. Confirm GCP site works end-to-end (including `/api` after frontend rebuild)
+2. Keep Cloudflare DNS on Cloud Run (already done for `anaghajewellers.com`)
 3. Disable or delete the Render backend (`render.yaml` is unused after cutover)
 4. Remove the Vercel project
 5. Keep Neon read-only for a few days, then delete

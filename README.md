@@ -10,6 +10,7 @@ anagha-website/
 └── package.json  # workspace scripts
 ```
 
+
 Production hosting is **GCP only** (Cloud Run + Cloud SQL + Cloud Storage). Follow [docs/GCP_DEPLOY.md](docs/GCP_DEPLOY.md). Local Dockerfiles: `frontend/Dockerfile`, `backend/Dockerfile`.
 
 ## Setup
