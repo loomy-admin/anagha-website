@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { type CatalogItem, formatDisplayPrice, getPrimaryImage } from '@/lib/erpCatalog';
 import { isInWishlist, toggleWishlist, WISHLIST_CHANGED_EVENT, type WishlistItem } from '@/lib/wishlist';
+import AddToCartButton from '@/components/AddToCartButton';
 
 function itemHref(item: CatalogItem) {
   const g = item.group_slug || 'item';
@@ -99,6 +100,20 @@ export default function ProductCard({ product }: { product: CatalogItem }) {
           {product.tag_number}
           {product.purity ? ` · ${product.purity}` : ''}
         </p>
+        {product.display_price != null && Number(product.display_price) > 0 ? (
+          <div className="mt-auto pt-3 w-full">
+            <AddToCartButton
+              stayOnPage
+              item={{
+                tag_number: product.tag_number,
+                name: product.name || 'Jewellery',
+                display_price: product.display_price,
+                image_url: getPrimaryImage(product),
+                type_slug: product.group_slug || product.type_slug,
+              }}
+            />
+          </div>
+        ) : null}
       </div>
     </Link>
   );

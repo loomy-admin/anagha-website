@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { GoogleOAuthProvider } from '@react-oauth/google';
+import FloatingActions from '@/components/FloatingActions';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -30,6 +31,7 @@ export default function RootLayout({
         ) : (
           children
         )}
+        <FloatingActions />
       </body>
     </html>
   );
