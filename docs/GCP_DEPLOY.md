@@ -625,7 +625,9 @@ ERP is the live source for products, stock, and product photos. The website keep
 
 | Job | Schedule (Asia/Kolkata) | Target |
 | --- | --- | --- |
-| `anagha-catalog-sync` | `*/15 * * * *` (every 15 minutes) | `POST https://api.anaghajewellers.com/api/internal/catalog-sync` |
+| `anagha-catalog-sync` | `*/15 * * * *` (every 15 minutes) | `POST https://anagha-backend-646499775904.asia-south1.run.app/api/internal/catalog-sync` |
+
+Use the backend's Cloud Run address, not `api.anaghajewellers.com`: Cloudflare cuts proxied requests off after 100 seconds, and a sync that rewrites the whole catalog can take longer.
 
 Each run reads ERP's full public catalog, updates changed pieces, and hides (status `sold`) pieces ERP no longer lists. Nothing is deleted. It sends header `x-sync-secret` with the backend's `CATALOG_SYNC_SECRET`.
 
@@ -639,7 +641,7 @@ gcloud scheduler jobs create http anagha-catalog-sync `
   --schedule="*/15 * * * *" `
   --time-zone="Asia/Kolkata" `
   --http-method=POST `
-  --uri="https://api.anaghajewellers.com/api/internal/catalog-sync" `
+  --uri="https://anagha-backend-646499775904.asia-south1.run.app/api/internal/catalog-sync" `
   --headers="x-sync-secret=YOUR_CATALOG_SYNC_SECRET" `
   --attempt-deadline=300s
 ```
