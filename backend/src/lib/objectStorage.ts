@@ -23,49 +23,6 @@ export function publicAssetBase() {
   return '';
 }
 
-export function isManagedAssetUrl(url: string) {
-  const value = String(url || '').trim();
-  if (!value) return false;
-  if (value.startsWith('/uploads/') || value.startsWith('/images/')) return true;
-  if (value.startsWith('data:') || value.startsWith('blob:')) return true;
-  const gcsBase = publicAssetBase();
-  if (gcsBase && value.startsWith(gcsBase)) return true;
-  const bucket = gcsBucketName();
-  if (bucket && value.includes(`storage.googleapis.com/${bucket}/`)) return true;
-  const api = trimSlash(String(process.env.PUBLIC_API_BASE_URL || process.env.PUBLIC_BASE_URL || ''));
-  if (api && (value.startsWith(`${api}/uploads/`) || value.startsWith(`${api}/images/`))) return true;
-  try {
-    const parsed = new URL(value);
-    if (parsed.pathname.startsWith('/uploads/') || parsed.pathname.startsWith('/images/')) {
-      return true;
-    }
-  } catch {
-    /* not an absolute URL */
-  }
-  return false;
-}
-
-export function isForeignAssetUrl(url: string) {
-  const value = String(url || '').trim();
-  if (!value) return false;
-  if (isManagedAssetUrl(value)) return false;
-  return /^https?:\/\//i.test(value) || value.startsWith('//');
-}
-
-export function isForeignImageUrl(url: string) {
-  if (!isForeignAssetUrl(url)) return false;
-  const value = url.toLowerCase();
-  return (
-    value.includes('supabase.co') ||
-    value.includes('inventory-images') ||
-    value.includes('/storage/v1/object') ||
-    value.includes('octis.') ||
-    value.includes('gold-develop') ||
-    value.includes('run.app') ||
-    /\.(avif|gif|jpe?g|png|webp)(\?|$)/i.test(value)
-  );
-}
-
 function gcsClient() {
   const json = String(process.env.GCS_SERVICE_ACCOUNT_JSON || '').trim();
   if (json) {
@@ -88,7 +45,7 @@ function gcsClient() {
   });
 }
 
-/** Store a public catalog/CMS file. Production uses GCS; local/dev can use /uploads. */
+/** Store a public CMS file (banners, tiles). Production uses GCS; local/dev can use /uploads. */
 export async function putPublicObject(relPath: string, buffer: Buffer, contentType = 'image/jpeg') {
   const rel = relPath.replace(/^\/+/, '').replace(/\\/g, '/');
   if (gcsConfigured()) {

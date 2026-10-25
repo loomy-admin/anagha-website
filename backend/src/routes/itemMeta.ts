@@ -3,13 +3,7 @@ import {
   getWebsiteItemMeta,
   setWebsiteItemDescription,
 } from '../lib/websiteItemMeta.js';
-import {
-  buildItemData,
-  getCatalogRow,
-  saveCatalogRow,
-  toPublicItem,
-  type CatalogStatus,
-} from '../lib/catalogStore.js';
+import { patchCatalogRowData } from '../lib/catalogStore.js';
 
 const router = Router();
 
@@ -46,15 +40,7 @@ router.put('/:tag', async (req, res) => {
     }
     const tag = paramTag(req);
     const meta = await setWebsiteItemDescription(tag, req.body.description);
-    const existing = await getCatalogRow(tag);
-    if (existing) {
-      const data = buildItemData({ description: req.body.description, tag_number: tag }, toPublicItem(existing));
-      await saveCatalogRow(data, {
-        origin: 'website',
-        status: existing.status as CatalogStatus,
-        soldAt: existing.soldAt,
-      });
-    }
+    await patchCatalogRowData(tag, { description: req.body.description });
     res.json({ data: meta });
   } catch (err) {
     handle(err, res);

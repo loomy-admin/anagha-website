@@ -73,26 +73,11 @@ function photoUrl(value: unknown): string | null {
   return null;
 }
 
-export function isOwnedImageUrl(url: string) {
-  const value = String(url || '').trim();
-  if (!value) return false;
-  if (value.startsWith('/uploads/') || value.startsWith('/images/')) return true;
-  if (value.startsWith('data:') || value.startsWith('blob:')) return true;
-  try {
-    const parsed = new URL(value, 'https://anaghajewellers.com');
-    if (parsed.pathname.startsWith('/uploads/') || parsed.pathname.startsWith('/images/')) return true;
-    if (parsed.hostname === 'storage.googleapis.com') return true;
-  } catch {
-    return false;
-  }
-  return false;
-}
-
 export function itemGalleryUrls(item: Partial<CatalogItem>): string[] {
   const urls: string[] = [];
   const add = (value: unknown) => {
     const url = photoUrl(value);
-    if (url && isOwnedImageUrl(url) && !urls.includes(url)) urls.push(url);
+    if (url && !urls.includes(url)) urls.push(url);
   };
   if (Array.isArray(item.website_images)) item.website_images.forEach(add);
   if (Array.isArray(item.images)) item.images.forEach(add);
@@ -234,6 +219,30 @@ export async function fetchCatalogFilters(params: Record<string, string | undefi
   return body.data as { store: unknown; filters: CatalogFilters };
 }
 
+export type LiveAvailability = { available: boolean | null; status: string };
+
+/**
+ * Ask ERP (via our backend) whether pieces can still be bought. `available: null` means
+ * ERP could not be reached; treat that as available so customers are not blocked.
+ */
+export async function checkCatalogAvailability(tags: string[]): Promise<Record<string, LiveAvailability>> {
+  const unique = [...new Set(tags.map((t) => String(t || '').trim().toUpperCase()).filter(Boolean))].slice(0, 30);
+  if (!unique.length) return {};
+  try {
+    const res = await fetch(`${getBaseUrl()}/api/catalog/availability`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify({ tags: unique }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body?.data) return {};
+    return body.data as Record<string, LiveAvailability>;
+  } catch {
+    return {};
+  }
+}
+
 export async function fetchCatalogItem(tag: string, opts?: { adminBypass?: boolean }) {
   const qs = opts?.adminBypass ? '?admin_bypass=true' : '';
   const res = await fetch(`${getBaseUrl()}/api/catalog/items/${encodeURIComponent(tag)}${qs}`, { cache: 'no-store' });
@@ -289,7 +298,7 @@ export async function setWebsiteImages(tag: string, websiteImages: string[]) {
   return body.data as CatalogItem;
 }
 
-/** Save website-only description (also writes catalog JSON). */
+/** Save website-only description (CMS; does not write ERP). */
 export async function saveItemDescription(tag: string, description: string) {
   const res = await fetch(`/api/upload/jewellery/item-meta/${encodeURIComponent(tag)}`, {
     method: 'PUT',
@@ -304,79 +313,6 @@ export async function saveItemDescription(tag: string, description: string) {
   return body.data as { description?: string };
 }
 
-export async function importCatalogSpreadsheet(
-  file: File,
-  opts: { defaultCategory?: string; forceCategory?: boolean } = {},
-) {
-  const form = new FormData();
-  form.append('file', file);
-  if (opts.defaultCategory) form.append('defaultCategory', opts.defaultCategory);
-  if (opts.forceCategory) form.append('forceCategory', 'true');
-  const res = await fetch('/api/upload/catalog/items/import', {
-    method: 'POST',
-    credentials: 'include',
-    body: form,
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || 'Spreadsheet import failed');
-  return body.data as { created: number; skipped: number; errors: string[]; message: string };
-}
-
-export async function downloadCatalogTemplate(category?: string) {
-  const qs = category ? `?category=${encodeURIComponent(category)}` : '';
-  const res = await fetch(`/api/upload/catalog/items/template.xlsx${qs}`, { credentials: 'include' });
-  if (!res.ok) throw new Error('Failed to download template');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = category
-    ? `anagha-catalog-template-${category.replace(/[^a-zA-Z0-9]+/g, '-').slice(0, 40)}.xlsx`
-    : 'anagha-catalog-template.xlsx';
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-export async function createCatalogItem(payload: Record<string, unknown>) {
-  const res = await fetch('/api/upload/catalog/items', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(payload),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(body.error || 'Failed to create item');
-  }
-  return body.data as CatalogItem;
-}
-
-export async function updateCatalogItem(tag: string, payload: Record<string, unknown>) {
-  const res = await fetch(`/api/upload/catalog/items/${encodeURIComponent(tag)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(payload),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(body.error || 'Failed to update item');
-  }
-  return body.data as CatalogItem;
-}
-
-export async function restockCatalogItem(tag: string) {
-  const res = await fetch(`/api/upload/catalog/items/${encodeURIComponent(tag)}/restock`, {
-    method: 'POST',
-    credentials: 'include',
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(body.error || 'Failed to add item back to stock');
-  }
-  return body.data as CatalogItem;
-}
-
 export async function setCatalogItemStatus(tag: string, status: 'available' | 'hidden') {
   const res = await fetch(`/api/upload/catalog/items/${encodeURIComponent(tag)}/status`, {
     method: 'PATCH',
@@ -389,88 +325,6 @@ export async function setCatalogItemStatus(tag: string, status: 'available' | 'h
     throw new Error(body.error || 'Failed to update status');
   }
   return body.data as CatalogItem;
-}
-
-export async function deleteCatalogGroup(fromSlug: string) {
-  const res = await fetch('/api/upload/catalog/taxonomy/groups', {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ from_slug: fromSlug }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || 'Failed to delete category');
-  return body.data as { slug: string; deleted: boolean; deleted_items: number };
-}
-
-export async function createCatalogGroup(name: string) {
-  const res = await fetch('/api/upload/catalog/taxonomy/groups', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ name }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || 'Failed to create category');
-  return body.data as { name: string; slug: string };
-}
-
-export async function createCatalogTaxonomyValue(
-  kind: 'type' | 'article' | 'metal' | 'purity',
-  name: string,
-) {
-  const res = await fetch('/api/upload/catalog/taxonomy/values', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ kind, name }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || 'Failed to save option');
-  return body.data as { kind: string; name: string; slug: string };
-}
-
-export async function renameCatalogTaxonomy(
-  kind: 'group' | 'type' | 'article' | 'metal' | 'purity',
-  fromSlug: string,
-  name: string,
-) {
-  const res = await fetch('/api/upload/catalog/taxonomy', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ kind, from_slug: fromSlug, name }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || 'Failed to rename');
-  return body.data as { kind: string; from_slug: string; name: string; slug: string };
-}
-
-export async function deleteCatalogTaxonomyValue(
-  kind: 'type' | 'article' | 'metal' | 'purity',
-  fromSlug: string,
-) {
-  const res = await fetch('/api/upload/catalog/taxonomy/values', {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ kind, from_slug: fromSlug }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || 'Failed to delete');
-  return body.data as { kind: string; from_slug: string; deleted: boolean };
-}
-
-export async function moveCatalogItems(tags: string[], group: string) {
-  const res = await fetch('/api/upload/catalog/taxonomy/move', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ tags, group }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || 'Failed to move items');
-  return body.data as { count: number; group: string; slug: string };
 }
 
 export async function bulkSetCatalogItemStatus(tags: string[], status: 'available' | 'hidden') {

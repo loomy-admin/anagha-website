@@ -1,6 +1,6 @@
 /**
- * ERP public catalog client — used only by Re-import ERP (syncCatalog).
- * After import, listing/search/filters/PDP/checkout/images use Neon + our storage only.
+ * ERP public catalog client: the scheduled sync (syncCatalog) and the live
+ * per-piece availability check (liveAvailability).
  */
 
 function trimSlash(url: string) {
@@ -52,4 +52,35 @@ export async function fetchErpPublic(
     throw Object.assign(new Error(message), { status: res.status });
   }
   return body;
+}
+
+export type ErpItemStatus = 'available' | 'reserved' | 'sold' | 'missing' | 'unknown';
+
+/**
+ * Current stock status of one tag from ERP's public item lookup.
+ * `unknown` means ERP could not be reached or answered for another store; callers must not act on it.
+ */
+export async function fetchErpItemStatus(tag: string, timeoutMs = 5000): Promise<ErpItemStatus> {
+  const { base, storeSlug } = getErpConfig();
+  try {
+    const res = await fetch(`${base}/public/item/${encodeURIComponent(tag)}`, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (res.status === 404) return 'missing';
+    if (!res.ok) return 'unknown';
+    const body = (await res.json().catch(() => ({}))) as {
+      data?: { status?: unknown; store?: { slug?: unknown } | unknown; store_slug?: unknown };
+    };
+    const data = body.data || {};
+    const store = data.store && typeof data.store === 'object' ? (data.store as { slug?: unknown }) : null;
+    const itemStore = String(store?.slug || data.store_slug || '').trim().toLowerCase();
+    if (itemStore && itemStore !== storeSlug) return 'unknown';
+    const status = String(data.status || '').trim().toLowerCase();
+    if (status === 'available' || status === 'reserved' || status === 'sold') return status;
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  }
 }

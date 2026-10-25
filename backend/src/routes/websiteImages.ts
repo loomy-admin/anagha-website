@@ -1,18 +1,10 @@
 import { Router, type Request, type Response } from 'express';
 import { invalidateCatalogFilters } from './catalog.js';
-import {
-  buildItemData,
-  getCatalogRow,
-  inventoryPhotoUrls,
-  saveCatalogRow,
-  toPublicItem,
-  type CatalogOrigin,
-  type CatalogStatus,
-} from '../lib/catalogStore.js';
+import { getCatalogRow, patchCatalogRowData, toPublicItem } from '../lib/catalogStore.js';
 import { applyWebsiteDescription, getAllWebsiteItemMeta } from '../lib/websiteItemMeta.js';
-import { safeUnlink } from '../lib/upload.js';
-import { MAX_PRODUCT_IMAGES, storeCatalogImage } from '../lib/catalogImage.js';
+import { setWebsiteImagesOnErp, uploadWebsiteImageOnErp } from '../lib/erpWebstore.js';
 
+/** Website gallery photos are stored in ERP; we mirror ERP's list onto the website copy. */
 const router = Router();
 
 function handle(err: unknown, res: Response) {
@@ -29,34 +21,15 @@ function paramTag(req: Request): string {
   return decodeURIComponent(Array.isArray(raw) ? String(raw[0] || '') : String(raw || '')).trim().toUpperCase();
 }
 
-async function asClientItem(row: NonNullable<Awaited<ReturnType<typeof getCatalogRow>>>) {
-  const metaMap = await getAllWebsiteItemMeta();
-  return applyWebsiteDescription(toPublicItem(row), metaMap);
-}
-
-async function persistGallery(tag: string, websiteImages: string[]) {
-  const existing = await getCatalogRow(tag);
-  if (!existing) {
-    throw Object.assign(new Error('Item not found'), { status: 404 });
-  }
-  const current = toPublicItem(existing);
-  const data = buildItemData({ website_images: websiteImages, tag_number: tag }, current);
-  data.image_url = websiteImages[0] || data.pos_image_url || null;
-  data.images = inventoryPhotoUrls(current);
-  const row = await saveCatalogRow(data, {
-    origin: (existing.origin as CatalogOrigin) || 'website',
-    status: existing.status as CatalogStatus,
-    soldAt: existing.soldAt,
-  });
-  invalidateCatalogFilters();
-  return asClientItem(row);
-}
-
 function incomingFiles(body: Record<string, unknown>) {
   if (Array.isArray(body.files)) {
     return body.files.map((row) => ({
       file: String((row as { file?: string })?.file || ''),
-      fileName: String((row as { fileName?: string; file_name?: string })?.fileName || (row as { file_name?: string })?.file_name || 'photo.jpg'),
+      fileName: String(
+        (row as { fileName?: string; file_name?: string })?.fileName ||
+          (row as { file_name?: string })?.file_name ||
+          'photo.jpg',
+      ),
     }));
   }
   if (body.file) {
@@ -65,7 +38,21 @@ function incomingFiles(body: Record<string, unknown>) {
   return [];
 }
 
-/** POST /api/upload/jewellery/website-images/:tag */
+function galleryFromErp(erpItem: unknown, fallback: string[]) {
+  const list = (erpItem as { website_images?: unknown } | null)?.website_images;
+  if (!Array.isArray(list)) return fallback;
+  return list.map((url) => String(url || '').trim()).filter(Boolean);
+}
+
+async function mirrorGallery(tag: string, websiteImages: string[]) {
+  const row = await patchCatalogRowData(tag, { website_images: websiteImages });
+  if (!row) throw Object.assign(new Error('Item not found'), { status: 404 });
+  invalidateCatalogFilters();
+  const metaMap = await getAllWebsiteItemMeta();
+  return applyWebsiteDescription(toPublicItem(row), metaMap);
+}
+
+/** POST /api/upload/jewellery/website-images/:tag — body { files: [{ file, fileName }] } */
 router.post('/:tag', async (req, res) => {
   try {
     const tag = paramTag(req);
@@ -74,29 +61,27 @@ router.post('/:tag', async (req, res) => {
       res.status(404).json({ error: 'Item not found' });
       return;
     }
-    const current = toPublicItem(existing);
-    const gallery = Array.isArray(current.website_images) ? [...current.website_images] : [];
     const files = incomingFiles(req.body || {});
     if (!files.length) {
       res.status(400).json({ error: 'files array is required' });
       return;
     }
-    if (gallery.length + files.length > MAX_PRODUCT_IMAGES) {
-      res.status(400).json({ error: `Maximum ${MAX_PRODUCT_IMAGES} website images` });
-      return;
-    }
+    let gallery = toPublicItem(existing).website_images || [];
     for (const item of files) {
-      const stored = await storeCatalogImage(tag, item.file, item.fileName);
-      gallery.push(stored.url);
+      const erpItem = await uploadWebsiteImageOnErp({
+        tagNumber: tag,
+        file: item.file,
+        fileName: item.fileName,
+      });
+      gallery = galleryFromErp(erpItem, gallery);
     }
-    const data = await persistGallery(tag, gallery);
-    res.json({ data });
+    res.json({ data: await mirrorGallery(tag, gallery) });
   } catch (err) {
     handle(err, res);
   }
 });
 
-/** PUT /api/upload/jewellery/website-images/:tag */
+/** PUT /api/upload/jewellery/website-images/:tag — replace / reorder / clear gallery */
 router.put('/:tag', async (req, res) => {
   try {
     const tag = paramTag(req);
@@ -105,22 +90,9 @@ router.put('/:tag', async (req, res) => {
       res.status(400).json({ error: 'website_images array is required' });
       return;
     }
-    const existing = await getCatalogRow(tag);
-    if (!existing) {
-      res.status(404).json({ error: 'Item not found' });
-      return;
-    }
     const next = images.map((u: unknown) => String(u || '').trim()).filter(Boolean);
-    if (next.length > MAX_PRODUCT_IMAGES) {
-      res.status(400).json({ error: `Maximum ${MAX_PRODUCT_IMAGES} website images` });
-      return;
-    }
-    const prev = Array.isArray((existing.data as { website_images?: string[] })?.website_images)
-      ? (existing.data as { website_images: string[] }).website_images
-      : [];
-    prev.filter((url) => url.startsWith('/uploads/') && !next.includes(url)).forEach((url) => safeUnlink(url));
-    const data = await persistGallery(tag, next);
-    res.json({ data });
+    const erpItem = await setWebsiteImagesOnErp({ tagNumber: tag, websiteImages: next });
+    res.json({ data: await mirrorGallery(tag, galleryFromErp(erpItem, next)) });
   } catch (err) {
     handle(err, res);
   }

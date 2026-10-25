@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import AddToCartButton from '@/components/AddToCartButton';
 import BuyNowButton from '@/components/BuyNowButton';
 import ProductDeliveryInfo from '@/components/ProductDeliveryInfo';
-import { formatDisplayPrice } from '@/lib/erpCatalog';
+import { checkCatalogAvailability, formatDisplayPrice } from '@/lib/erpCatalog';
 import { useContactInfo } from '@/lib/contact';
 
 type Props = {
@@ -43,6 +43,19 @@ export default function ProductDetailPanel({
 }: Props) {
   const { whatsapp, phone } = useContactInfo();
   const [openSection, setOpenSection] = useState<string | null>('shipping');
+  const [soldOut, setSoldOut] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    checkCatalogAvailability([tagNumber]).then((live) => {
+      if (!cancelled && live[tagNumber.toUpperCase()]?.available === false) setSoldOut(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tagNumber]);
+
+  const canBuy = !soldOut && displayPrice != null && Number(displayPrice) > 0;
   // const [customizeOpen, setCustomizeOpen] = useState(false);
   const netLabel =
     netWeight != null && netWeight !== '' ? `${Number(netWeight)}g` : null;
@@ -72,7 +85,7 @@ export default function ProductDetailPanel({
     <div className="flex-1 lg:pl-4">
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-2">
         <h1 className="font-domine text-[#222] text-xl sm:text-2xl font-bold min-w-0 break-words">{name}</h1>
-        {displayPrice != null && Number(displayPrice) > 0 ? (
+        {canBuy ? (
           <div className="shrink-0 pt-1">
             <AddToCartButton item={cartItem} />
           </div>
@@ -87,6 +100,11 @@ export default function ProductDetailPanel({
           ) : null}
         </div>
         <p className="text-gray-400 text-[11px]">MRP Incl. of all taxes</p>
+        {soldOut ? (
+          <p className="mt-3 text-sm font-semibold text-red-600 bg-red-50 border border-red-100 rounded px-3 py-2">
+            This piece has just been sold. Browse similar pieces below.
+          </p>
+        ) : null}
       </div>
 
       <div className="bg-[#f9fafb] border border-gray-100 rounded-lg p-4 mb-6">
@@ -206,7 +224,7 @@ export default function ProductDetailPanel({
       </div>
 
       <div className="flex flex-row gap-3 mb-6">
-        {displayPrice != null && Number(displayPrice) > 0 ? (
+        {canBuy ? (
           <BuyNowButton item={cartItem} className="flex-1" />
         ) : null}
         <a

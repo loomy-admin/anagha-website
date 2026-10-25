@@ -3,7 +3,8 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
 import { checkoutSessions } from '../db/schema.js';
-import { reserveWebsiteTags, releaseWebsiteTags, markWebsiteTagsSold } from '../lib/websiteInventory.js';
+import { reserveOnErp, releaseOnErp, completeOnErp } from '../lib/erpWebstore.js';
+import { markTagsReserved, markTagsReleased, markTagsSold } from '../lib/websiteInventory.js';
 import { requireCustomer, requireAdmin } from '../lib/customerAuth.js';
 import { resolveShippingMethod, getShippingConfig } from './shippingConfig.js';
 import {
@@ -222,15 +223,26 @@ async function finalizePaidSession(sessionId: string, paymentRef: string) {
     throw Object.assign(new Error('Customer details missing on session'), { status: 400 });
   }
 
-  const complete = {
-    bill: {
-      id: session.id,
-      bill_number: session.erpBillNumber || `AJ-${String(session.id).slice(0, 8).toUpperCase()}`,
-      items: [] as unknown[],
-    },
-  };
+  // Payment is already captured here, so an ERP failure must not lose the order.
+  let complete: { bill?: { id?: string; bill_number?: string; items?: unknown[] } } | null = null;
+  let completeError: string | null = null;
+  try {
+    complete = await completeOnErp({
+      checkoutSessionId: session.id,
+      paymentRef,
+      paidAmount: Number(session.itemsAmount || session.amount),
+      customer: {
+        name: session.customerName,
+        mobile: session.customerMobile,
+        email: session.customerEmail || undefined,
+      },
+    });
+  } catch (err) {
+    completeError = err instanceof Error ? err.message : 'ERP complete failed';
+    console.error('[checkout] ERP complete failed after payment', session.id, paymentRef, err);
+  }
 
-  await markWebsiteTagsSold(parseTagNumbers(session.tagNumber));
+  await markTagsSold(parseTagNumbers(session.tagNumber)).catch(() => undefined);
 
   const prevPayload =
     session.paymentPayload && typeof session.paymentPayload === 'object'
@@ -246,13 +258,14 @@ async function finalizePaidSession(sessionId: string, paymentRef: string) {
     .set({
       status: 'paid',
       razorpayPaymentId: paymentRef,
-      erpBillId: complete.bill.id,
-      erpBillNumber: complete.bill.bill_number,
+      erpBillId: complete?.bill?.id || null,
+      erpBillNumber: complete?.bill?.bill_number || null,
       paymentPayload: {
         ...prevPayload,
         items: cartItems.length ? cartItems : billItems,
         item_names: itemNames,
         complete,
+        erp_complete_error: completeError,
         paymentRef,
       },
       updatedAt: new Date(),
@@ -263,7 +276,7 @@ async function finalizePaidSession(sessionId: string, paymentRef: string) {
   return updated;
 }
 
-/** POST /api/checkout/session — reserve website catalog tags + Razorpay order (auth required). */
+/** POST /api/checkout/session — reserve ERP item(s) + Razorpay order (auth required). */
 router.post('/session', requireCustomer, async (req: Request, res: Response) => {
   try {
     const customer = req.customer!;
@@ -290,11 +303,20 @@ router.post('/session', requireCustomer, async (req: Request, res: Response) => 
     const sessionId = uuidv4();
     const receipt = `ANAGHA-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-    const reserved = await reserveWebsiteTags(uniqueTags);
+    const releaseHold = async () => {
+      await releaseOnErp(sessionId).catch(() => undefined);
+      await markTagsReleased(uniqueTags).catch(() => undefined);
+    };
+
+    const reserved = await reserveOnErp({
+      checkoutSessionId: sessionId,
+      tags: uniqueTags,
+    });
+    await markTagsReserved(uniqueTags).catch(() => undefined);
 
     const itemsAmount = Number(reserved.total_amount);
-    if (!Number.isFinite(itemsAmount) || itemsAmount < 0) {
-      await releaseWebsiteTags(uniqueTags).catch(() => undefined);
+    if (!Number.isFinite(itemsAmount) || itemsAmount <= 0) {
+      await releaseHold();
       return res.status(400).json({ error: 'Reserved item has invalid amount' });
     }
 
@@ -302,15 +324,11 @@ router.post('/session', requireCustomer, async (req: Request, res: Response) => 
     try {
       shipping = await resolveShippingMethod(req.body.shipping_method_id);
     } catch (shipErr) {
-      await releaseWebsiteTags(uniqueTags).catch(() => undefined);
+      await releaseHold();
       throw shipErr;
     }
     const shippingAmount = Number(shipping.charge) || 0;
     const amount = itemsAmount + shippingAmount;
-    if (!Number.isFinite(amount) || amount < 1) {
-      await releaseWebsiteTags(uniqueTags).catch(() => undefined);
-      return res.status(400).json({ error: 'Order total must be at least ₹1 after offers' });
-    }
 
     const selectedAddress = asAddressObject(
       req.body.shippingAddress || customer.shippingAddress,
@@ -339,14 +357,7 @@ router.post('/session', requireCustomer, async (req: Request, res: Response) => 
         customerMobile: mobile,
         customerEmail: email || null,
         shippingAddress: selectedAddress,
-        paymentPayload: {
-          cart_tags: uniqueTags,
-          items: lines,
-          offer: reserved.offer || null,
-          items_subtotal: reserved.items_subtotal,
-        },
-        erpBillId: sessionId,
-        erpBillNumber: `AJ-${sessionId.slice(0, 8).toUpperCase()}`,
+        paymentPayload: { cart_tags: uniqueTags, items: lines },
         expiresAt,
       });
 
@@ -370,8 +381,6 @@ router.post('/session', requireCustomer, async (req: Request, res: Response) => 
         ...(rzp as unknown as Record<string, unknown>),
         cart_tags: uniqueTags,
         items: lines,
-        offer: reserved.offer || null,
-        items_subtotal: reserved.items_subtotal,
       };
 
       await db
@@ -397,7 +406,7 @@ router.post('/session', requireCustomer, async (req: Request, res: Response) => 
         },
       });
     } catch (inner) {
-      await releaseWebsiteTags(uniqueTags).catch(() => undefined);
+      await releaseHold();
       await db
         .update(checkoutSessions)
         .set({ status: 'failed', updatedAt: new Date() })
@@ -447,7 +456,7 @@ router.get('/session/:id', async (req: Request, res: Response) => {
   }
 });
 
-/** POST /api/checkout/session/:id/cancel — release website catalog hold */
+/** POST /api/checkout/session/:id/cancel — release ERP hold */
 router.post('/session/:id/cancel', async (req: Request, res: Response) => {
   try {
     const rows = await db
@@ -461,7 +470,8 @@ router.post('/session/:id/cancel', async (req: Request, res: Response) => {
       return res.status(409).json({ error: 'Paid session cannot be cancelled' });
     }
 
-    await releaseWebsiteTags(parseTagNumbers(session.tagNumber)).catch(() => undefined);
+    await releaseOnErp(session.id).catch(() => undefined);
+    await markTagsReleased(parseTagNumbers(session.tagNumber)).catch(() => undefined);
     const [updated] = await db
       .update(checkoutSessions)
       .set({ status: 'cancelled', updatedAt: new Date() })
@@ -510,7 +520,8 @@ router.post('/session/:id/confirm-razorpay', async (req: Request, res: Response)
 
     const ok = verifyRazorpayPaymentSignature({ orderId, paymentId, signature });
     if (!ok) {
-      await releaseWebsiteTags(parseTagNumbers(session.tagNumber)).catch(() => undefined);
+      await releaseOnErp(session.id).catch(() => undefined);
+      await markTagsReleased(parseTagNumbers(session.tagNumber)).catch(() => undefined);
       await db
         .update(checkoutSessions)
         .set({ status: 'failed', updatedAt: new Date() })

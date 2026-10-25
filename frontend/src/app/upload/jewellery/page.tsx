@@ -5,7 +5,6 @@ import Header from '@/components/Header';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  deleteCatalogGroup,
   fetchCatalog,
   fetchCatalogFilters,
   fetchGroupImages,
@@ -15,9 +14,7 @@ import {
   type CatalogFilterOption,
 } from '@/lib/erpCatalog';
 import { fetchErpVisibility } from '@/lib/erpVisibility';
-import AddProductsPanel, { addProductsBtn } from './AddProductsPanel';
 import AdminSearchField, { textMatchesQuery } from './AdminSearchField';
-import SharedTaxonomyEditor from './SharedTaxonomyEditor';
 
 export default function JewelleryEditor() {
   const [groups, setGroups] = useState<CatalogFilterOption[]>([]);
@@ -28,19 +25,9 @@ export default function JewelleryEditor() {
   const [error, setError] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const [uploadingSlug, setUploadingSlug] = useState<string | null>(null);
-  const [deletingSlug, setDeletingSlug] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
-  const [panel, setPanel] = useState(false);
-  const [labelsOpen, setLabelsOpen] = useState(false);
   const [categoryQuery, setCategoryQuery] = useState('');
-  const [suggestions, setSuggestions] = useState<{
-    groups: string[];
-    types: string[];
-    articles: string[];
-    metals: string[];
-    purities: string[];
-  }>({ groups: [], types: [], articles: [], metals: [], purities: [] });
   const fileRef = useRef<HTMLInputElement>(null);
   const pendingSlugRef = useRef('');
 
@@ -79,14 +66,6 @@ export default function JewelleryEditor() {
           (a, b) => (b.count || 0) - (a.count || 0) || a.name.localeCompare(b.name),
         );
         setGroups(withExactCounts);
-        const f = payload.filters;
-        setSuggestions({
-          groups: (f.group || []).map((g) => g.name || g.slug || '').filter(Boolean),
-          types: (f.type || []).map((g) => g.name || g.slug || '').filter(Boolean),
-          articles: (f.article || []).map((g) => g.name || g.slug || '').filter(Boolean),
-          metals: (f.metal_type || []).map((g) => g.name || '').filter(Boolean),
-          purities: (f.purity || []).map((g) => g.name || '').filter(Boolean),
-        });
         setError(null);
       } catch (err) {
         if (!cancelled) {
@@ -153,25 +132,6 @@ export default function JewelleryEditor() {
     }
   }
 
-  async function deleteCategory(slug: string, name: string, count: number) {
-    if (deletingSlug) return;
-    const extra =
-      count > 0
-        ? ` This also deletes ${count} product${count === 1 ? '' : 's'} in it. Re-import from ERP can bring ERP products back.`
-        : '';
-    if (!window.confirm(`Delete category “${name}”?${extra}`)) return;
-    setDeletingSlug(slug);
-    setError(null);
-    try {
-      await deleteCatalogGroup(slug);
-      setGroups((prev) => prev.filter((g) => (g.slug || slugifyName(g.name)) !== slug));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete category');
-    } finally {
-      setDeletingSlug(null);
-    }
-  }
-
   const visibleGroups = useMemo(() => {
     return groups.filter((g) =>
       textMatchesQuery(categoryQuery, g.name, g.slug, slugifyName(g.name)),
@@ -203,33 +163,10 @@ export default function JewelleryEditor() {
           />
           <button
             type="button"
-            className={addProductsBtn}
-            onClick={() => {
-              setLabelsOpen(false);
-              setPanel((open) => !open);
-            }}
-          >
-            Add products
-          </button>
-          <button
-            type="button"
-            className={addProductsBtn}
-            onClick={() => {
-              setPanel(false);
-              setLabelsOpen((open) => !open);
-            }}
-          >
-            Labels
-          </button>
-          <Link href="/upload/jewellery/sold" className={addProductsBtn}>
-            Sold
-          </Link>
-          <button
-            type="button"
             disabled={importing}
             onClick={async () => {
               setImporting(true);
-              setImportMessage('Starting import…');
+              setImportMessage('Starting sync…');
               try {
                 const res = await fetch('/api/upload/catalog/reimport', {
                   method: 'POST',
@@ -237,9 +174,9 @@ export default function JewelleryEditor() {
                 });
                 const body = await res.json().catch(() => ({}));
                 if (!res.ok && res.status !== 202) {
-                  throw new Error(body.data?.message || body.error || 'Import failed');
+                  throw new Error(body.data?.message || body.error || 'Sync failed');
                 }
-                setImportMessage(body.data?.message || 'Importing…');
+                setImportMessage(body.data?.message || 'Syncing…');
                 const started = Date.now();
                 while (Date.now() - started < 15 * 60 * 1000) {
                   await new Promise((r) => setTimeout(r, 1500));
@@ -248,23 +185,23 @@ export default function JewelleryEditor() {
                   const data = statusBody.data || {};
                   if (data.message) setImportMessage(data.message);
                   if (data.running) continue;
-                  if (data.ok === false) throw new Error(data.message || 'Import failed');
+                  if (data.ok === false) throw new Error(data.message || 'Sync failed');
                   if (data.ok === true) {
                     window.location.reload();
                     return;
                   }
                   break;
                 }
-                throw new Error('Import is taking too long — refresh the page and check the catalog');
+                throw new Error('Sync is taking too long — refresh the page and check the catalog');
               } catch (err) {
-                setImportMessage(err instanceof Error ? err.message : 'Import failed');
+                setImportMessage(err instanceof Error ? err.message : 'Sync failed');
               } finally {
                 setImporting(false);
               }
             }}
             className="text-[11px] font-bold uppercase tracking-widest text-gray-400 hover:text-navy disabled:opacity-50"
           >
-            {importing ? 'Importing…' : 'Re-import ERP'}
+            {importing ? 'Syncing…' : 'Sync from ERP'}
           </button>
         </div>
 
@@ -275,26 +212,6 @@ export default function JewelleryEditor() {
           className="hidden"
           onChange={(e) => onImageSelected(e.target.files?.[0] || null)}
         />
-
-        {panel ? (
-          <AddProductsPanel
-            suggestions={suggestions}
-            onMessage={setImportMessage}
-            onDone={() => window.location.reload()}
-            onClose={() => setPanel(false)}
-          />
-        ) : null}
-
-        {labelsOpen && !loading && !error ? (
-          <SharedTaxonomyEditor
-            types={suggestions.types}
-            articles={suggestions.articles}
-            metals={suggestions.metals}
-            purities={suggestions.purities}
-            onChange={(patch) => setSuggestions((prev) => ({ ...prev, ...patch }))}
-            onClose={() => setLabelsOpen(false)}
-          />
-        ) : null}
 
         {importMessage ? (
           <p className="text-center text-sm mb-6 text-navy">{importMessage}</p>
@@ -385,11 +302,10 @@ export default function JewelleryEditor() {
                             <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
                               Visible
                             </span>
-                            <div className="flex items-center gap-2">
                             <button
                               type="button"
                               onClick={() => toggleCategoryVisibility(slug)}
-                              disabled={visibilitySaving || deletingSlug === slug}
+                              disabled={visibilitySaving}
                               className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 ${
                                 isVisible ? 'bg-rose-500' : 'bg-gray-200'
                               } ${visibilitySaving ? 'opacity-50' : ''}`}
@@ -404,16 +320,6 @@ export default function JewelleryEditor() {
                                 }`}
                               />
                             </button>
-                            <button
-                              type="button"
-                              title="Delete category"
-                              disabled={Boolean(deletingSlug)}
-                              onClick={() => void deleteCategory(slug, g.name, g.count || 0)}
-                              className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-rose-600 disabled:opacity-40"
-                            >
-                              {deletingSlug === slug ? '…' : 'Delete'}
-                            </button>
-                            </div>
                           </div>
                         </div>
                       </motion.div>

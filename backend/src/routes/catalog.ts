@@ -7,68 +7,10 @@ import { getSearchSuggestionsConfig } from '../lib/searchSuggestions.js';
 import { db } from '../db/index.js';
 import { cachedCatalogItems } from '../db/schema.js';
 import { slugifyName, toPublicItem } from '../lib/catalogStore.js';
-import { getExtraGroups, getExtraTaxonomy } from '../lib/catalogTaxonomy.js';
+import { checkLiveAvailability } from '../lib/liveAvailability.js';
 import { sql, and, eq, ilike, or, desc, asc, gte, lte, inArray } from 'drizzle-orm';
 
 const router = Router();
-
-function mergeExtraTaxonomy(
-  filters: {
-    group: Array<{ slug: string | null; name: string; count: number }>;
-    type: Array<{ slug: string | null; name: string; count: number }>;
-    article: Array<{ slug: string | null; name: string; count: number }>;
-    purity: Array<{ name: string | null; count: number }>;
-    metal_type: Array<{ name: string | null; count: number }>;
-  },
-  extraGroups: Awaited<ReturnType<typeof getExtraGroups>>,
-  extra: Awaited<ReturnType<typeof getExtraTaxonomy>>,
-) {
-  const groupSeen = new Set((filters.group || []).map((g) => g.slug));
-  extraGroups.forEach((g) => {
-    if (!groupSeen.has(g.slug)) {
-      filters.group.push({ slug: g.slug, name: g.name, count: 0 });
-      groupSeen.add(g.slug);
-    } else {
-      const row = filters.group.find((x) => x.slug === g.slug);
-      if (row && g.name) row.name = g.name;
-    }
-  });
-  const typeSeen = new Set((filters.type || []).map((g) => g.slug));
-  extra.types.forEach((g) => {
-    if (!typeSeen.has(g.slug)) {
-      filters.type.push({ slug: g.slug, name: g.name, count: 0 });
-      typeSeen.add(g.slug);
-    } else {
-      const row = filters.type.find((x) => x.slug === g.slug);
-      if (row && g.name) row.name = g.name;
-    }
-  });
-  const articleSeen = new Set((filters.article || []).map((g) => g.slug));
-  extra.articles.forEach((g) => {
-    if (!articleSeen.has(g.slug)) {
-      filters.article.push({ slug: g.slug, name: g.name, count: 0 });
-      articleSeen.add(g.slug);
-    } else {
-      const row = filters.article.find((x) => x.slug === g.slug);
-      if (row && g.name) row.name = g.name;
-    }
-  });
-  const metalSeen = new Set((filters.metal_type || []).map((g) => String(g.name || '').toLowerCase()));
-  extra.metals.forEach((name) => {
-    if (!metalSeen.has(name.toLowerCase())) {
-      filters.metal_type.push({ name, count: 0 });
-      metalSeen.add(name.toLowerCase());
-    }
-  });
-  const puritySeen = new Set((filters.purity || []).map((g) => String(g.name || '').toLowerCase()));
-  extra.purities.forEach((name) => {
-    if (!puritySeen.has(name.toLowerCase())) {
-      filters.purity.push({ name, count: 0 });
-      puritySeen.add(name.toLowerCase());
-    }
-  });
-  return filters;
-}
 
 function splitList(value?: string) {
   return String(value || '')
@@ -317,7 +259,7 @@ function normalizeStem(word: string): string {
   return w;
 }
 
-/** GET /api/catalog — Neon cached_catalog_items only (ERP is import-only). */
+/** GET /api/catalog — website copy of the ERP catalog (cached_catalog_items). */
 router.get('/', async (req: Request, res: Response) => {
   try {
     const query = pickQuery(req, [
@@ -433,19 +375,11 @@ router.get('/filters', async (req: Request, res: Response) => {
     );
 
     let filters;
-    if (adminBypass && !scoped) {
-      filters = await queryFilters({ adminBypass: true });
-      const [extraGroups, extraTaxonomy] = await Promise.all([getExtraGroups(), getExtraTaxonomy()]);
-      mergeExtraTaxonomy(filters, extraGroups, extraTaxonomy);
-    } else if (!adminBypass && !scoped) {
+    if (!adminBypass && !scoped) {
       const body = await getCachedFilters();
       filters = body.filters;
     } else {
       filters = await queryFilters(scope);
-      if (adminBypass) {
-        const [extraGroups, extraTaxonomy] = await Promise.all([getExtraGroups(), getExtraTaxonomy()]);
-        mergeExtraTaxonomy(filters, extraGroups, extraTaxonomy);
-      }
     }
 
     res.json({ data: { filters } });
@@ -471,6 +405,35 @@ router.get('/items/:tag', async (req: Request, res: Response) => {
     }
     const metaMap = await getAllWebsiteItemMeta();
     const data = applyWebsiteDescription(toPublicItem(row), metaMap);
+    res.json({ data });
+  } catch (err) {
+    handleErpError(err, res);
+  }
+});
+
+/**
+ * POST /api/catalog/availability — body { tags: string[] } (max 30).
+ * Live ERP check for product page, cart, and checkout; hides sold pieces in the website copy.
+ */
+router.post('/availability', async (req: Request, res: Response) => {
+  try {
+    const requested: string[] = Array.isArray(req.body?.tags)
+      ? [...new Set((req.body.tags as unknown[]).map((t) => String(t || '').trim().toUpperCase()).filter(Boolean))]
+      : [];
+    if (!requested.length) return res.status(400).json({ error: 'tags array is required' });
+    if (requested.length > 30) return res.status(400).json({ error: 'Maximum 30 tags per request' });
+
+    const known = await db
+      .select({ tag: cachedCatalogItems.tagNumber })
+      .from(cachedCatalogItems)
+      .where(inArray(cachedCatalogItems.tagNumber, requested));
+    const { result, changed } = await checkLiveAvailability(known.map((row) => row.tag));
+    if (changed) invalidateCatalogFilters();
+
+    const data: Record<string, { available: boolean | null; status: string }> = {};
+    for (const tag of requested) {
+      data[tag] = result[tag] || { available: false, status: 'missing' };
+    }
     res.json({ data });
   } catch (err) {
     handleErpError(err, res);

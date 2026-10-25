@@ -10,6 +10,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/scripts/migrate.ts",
     "db:seed": "tsx src/scripts/seed.ts",
+    "db:go-live-cleanup": "tsx src/scripts/goLiveCleanup.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

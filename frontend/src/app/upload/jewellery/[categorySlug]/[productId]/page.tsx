@@ -1,30 +1,26 @@
 'use client';
 
 import { useState, useEffect, use } from 'react';
-import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import Link from 'next/link';
 import {
   fetchCatalogItem,
-  fetchCatalogFilters,
+  formatDisplayPrice,
   itemHref,
+  saveItemDescription,
   setWebsiteImages,
   uploadWebsiteImage,
-  updateCatalogItem,
   setCatalogItemStatus,
-  restockCatalogItem,
   type CatalogItem,
 } from '@/lib/erpCatalog';
 
 import ProductPhotoButtons from '@/components/ProductPhotoButtons';
 import { MAX_PRODUCT_IMAGES } from '@/lib/imageCapture';
-import {
-  CatalogItemForm,
-  catalogItemToForm,
-  emptyCatalogForm,
-  formToPayload,
-  type CatalogFormValues,
-} from '../../CatalogItemForm';
+
+function weightLabel(value: number | string | null | undefined) {
+  if (value == null || value === '') return null;
+  return `${Number(value)} g`;
+}
 
 export default function ProductEditor({
   params,
@@ -32,47 +28,26 @@ export default function ProductEditor({
   params: Promise<{ categorySlug: string; productId: string }>;
 }) {
   const { categorySlug, productId } = use(params);
-  const router = useRouter();
   const tag = decodeURIComponent(productId);
   const [product, setProduct] = useState<CatalogItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [galleryError, setGalleryError] = useState<string | null>(null);
-  const [form, setForm] = useState<CatalogFormValues>(emptyCatalogForm());
-  const [detailsSaving, setDetailsSaving] = useState(false);
-  const [detailsMessage, setDetailsMessage] = useState<string | null>(null);
+  const [description, setDescription] = useState('');
+  const [descSaving, setDescSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const [statusBusy, setStatusBusy] = useState(false);
-  const [suggestions, setSuggestions] = useState<{
-    groups: string[];
-    types: string[];
-    articles: string[];
-    metals: string[];
-    purities: string[];
-  }>({ groups: [], types: [], articles: [], metals: [], purities: [] });
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        const [item, filters] = await Promise.all([
-          fetchCatalogItem(tag, { adminBypass: true }),
-          fetchCatalogFilters({ admin_bypass: 'true' }).catch(() => null),
-        ]);
+        const item = await fetchCatalogItem(tag, { adminBypass: true });
         if (!cancelled) {
           setProduct(item);
-          setForm(catalogItemToForm(item));
+          setDescription(item.description || '');
           setError(null);
-          if (filters?.filters) {
-            const f = filters.filters;
-            setSuggestions({
-              groups: (f.group || []).map((g) => g.name || g.slug || '').filter(Boolean),
-              types: (f.type || []).map((g) => g.name || g.slug || '').filter(Boolean),
-              articles: (f.article || []).map((g) => g.name || g.slug || '').filter(Boolean),
-              metals: (f.metal_type || []).map((g) => g.name || '').filter(Boolean),
-              purities: (f.purity || []).map((g) => g.name || '').filter(Boolean),
-            });
-          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -104,7 +79,7 @@ export default function ProductEditor({
     setGalleryError(null);
     try {
       const updated = await uploadWebsiteImage(tag, { dataUrl, fileName });
-      setProduct(updated);
+      setProduct({ ...updated, description });
     } catch (err) {
       setGalleryError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
@@ -122,7 +97,7 @@ export default function ProductEditor({
     setGalleryError(null);
     try {
       const updated = await setWebsiteImages(tag, next);
-      setProduct(updated);
+      setProduct({ ...updated, description });
     } catch (err) {
       setGalleryError(err instanceof Error ? err.message : 'Reorder failed');
     } finally {
@@ -137,7 +112,7 @@ export default function ProductEditor({
     setGalleryError(null);
     try {
       const updated = await setWebsiteImages(tag, next);
-      setProduct(updated);
+      setProduct({ ...updated, description });
     } catch (err) {
       setGalleryError(err instanceof Error ? err.message : 'Remove failed');
     } finally {
@@ -145,23 +120,18 @@ export default function ProductEditor({
     }
   }
 
-  async function onSaveDetails() {
+  async function onSaveDescription() {
     if (!product) return;
-    setDetailsSaving(true);
-    setDetailsMessage(null);
+    setDescSaving(true);
+    setMessage(null);
     try {
-      const updated = await updateCatalogItem(tag, formToPayload(form));
-      setProduct(updated);
-      setForm(catalogItemToForm(updated));
-      setDetailsMessage('Details saved');
-      const nextSlug = updated.group_slug || categorySlug;
-      if (nextSlug && nextSlug !== categorySlug) {
-        router.replace(`/upload/jewellery/${nextSlug}/${encodeURIComponent(updated.tag_number)}`);
-      }
+      await saveItemDescription(tag, description);
+      setProduct({ ...product, description });
+      setMessage('Description saved');
     } catch (err) {
-      setDetailsMessage(err instanceof Error ? err.message : 'Failed to save details');
+      setMessage(err instanceof Error ? err.message : 'Failed to save description');
     } finally {
-      setDetailsSaving(false);
+      setDescSaving(false);
     }
   }
 
@@ -169,27 +139,12 @@ export default function ProductEditor({
     if (!product) return;
     const next = product.status === 'hidden' ? 'available' : 'hidden';
     setStatusBusy(true);
-    setDetailsMessage(null);
+    setMessage(null);
     try {
       const updated = await setCatalogItemStatus(tag, next);
-      setProduct(updated);
+      setProduct({ ...updated, description });
     } catch (err) {
-      setDetailsMessage(err instanceof Error ? err.message : 'Failed to update visibility');
-    } finally {
-      setStatusBusy(false);
-    }
-  }
-
-  async function onRestock() {
-    if (!product) return;
-    setStatusBusy(true);
-    setDetailsMessage(null);
-    try {
-      const updated = await restockCatalogItem(tag);
-      setProduct(updated);
-      setDetailsMessage('Added back to stock');
-    } catch (err) {
-      setDetailsMessage(err instanceof Error ? err.message : 'Failed to restock');
+      setMessage(err instanceof Error ? err.message : 'Failed to update visibility');
     } finally {
       setStatusBusy(false);
     }
@@ -217,6 +172,20 @@ export default function ProductEditor({
   }
 
   const canToggleVisibility = product.status === 'available' || product.status === 'hidden';
+  const details: Array<[string, string | null | undefined]> = [
+    ['Tag', product.tag_number],
+    ['Category', product.group],
+    ['Type', product.type],
+    ['Article', product.article],
+    ['Metal', product.metal_type],
+    ['Purity', product.purity],
+    ['Price', product.display_price != null ? formatDisplayPrice(product.display_price) : null],
+    ['MRP', product.mrp != null ? formatDisplayPrice(product.mrp) : null],
+    ['Net weight', weightLabel(product.net_weight)],
+    ['Gross weight', weightLabel(product.gross_weight)],
+    ['Total weight', weightLabel(product.total_weight)],
+    ['Stone weight', weightLabel(product.stone_weight)],
+  ];
 
   return (
     <div className="min-h-screen bg-[#fffbfa] flex flex-col">
@@ -235,7 +204,7 @@ export default function ProductEditor({
             </Link>
             <div>
               <div className="text-[10px] font-black text-emerald-600/80 uppercase tracking-widest mb-1">
-                Product editor · {product.origin || 'erp'} · {product.status || 'available'}
+                Product editor · {product.status || 'available'}
               </div>
               <h1 className="text-3xl font-display font-bold text-navy tracking-tight">{product.name}</h1>
             </div>
@@ -251,23 +220,14 @@ export default function ProductEditor({
                 {statusBusy ? 'Updating…' : product.status === 'hidden' ? 'Show on store' : 'Hide from store'}
               </button>
             ) : null}
-            {product.status === 'sold' ? (
-              <button
-                type="button"
-                disabled={statusBusy}
-                onClick={onRestock}
-                className="px-8 py-3 rounded-full bg-navy text-white font-black text-[11px] uppercase tracking-widest disabled:opacity-40"
-              >
-                {statusBusy ? 'Updating…' : 'Add to stock'}
-              </button>
-            ) : (
+            {product.status === 'available' ? (
               <Link
                 href={itemHref(product)}
                 className="bg-navy text-white px-8 py-3 rounded-full font-black text-[11px] uppercase tracking-widest hover:bg-coral transition-all"
               >
                 View on storefront
               </Link>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -282,6 +242,9 @@ export default function ProductEditor({
                 onReady={onUpload}
               />
             </div>
+            <p className="text-[11px] text-gray-400">
+              Photos are saved to ERP. Without website photos, the ERP inventory photo is shown.
+            </p>
 
             {galleryError ? (
               <p className="text-sm text-rose-600">{galleryError}</p>
@@ -346,26 +309,50 @@ export default function ProductEditor({
             )}
           </div>
 
-          <div className="bg-white rounded-[32px] p-8 shadow-sm border border-gray-100 space-y-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                Details
+          <div className="bg-white rounded-[32px] p-8 shadow-sm border border-gray-100 space-y-6">
+            <div>
+              <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                Details from ERP
               </h3>
-              <button
-                type="button"
-                disabled={detailsSaving}
-                onClick={onSaveDetails}
-                className="bg-navy text-white px-5 py-2 rounded-full font-black text-[10px] uppercase tracking-widest disabled:opacity-40 hover:bg-rose-600 transition-all"
-              >
-                {detailsSaving ? 'Saving…' : 'Save details'}
-              </button>
+              <p className="text-[11px] text-gray-400 mb-4">Change these in ERP; the website updates on the next sync.</p>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                {details
+                  .filter(([, value]) => value)
+                  .map(([label, value]) => (
+                    <div key={label}>
+                      <dt className="text-[10px] uppercase tracking-wider text-gray-400">{label}</dt>
+                      <dd className="text-navy font-medium">{value}</dd>
+                    </div>
+                  ))}
+              </dl>
             </div>
-            <CatalogItemForm values={form} onChange={setForm} tagLocked suggestions={suggestions} />
-            {detailsMessage ? (
-              <p className={`text-[12px] ${detailsMessage === 'Details saved' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                {detailsMessage}
-              </p>
-            ) : null}
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                  Website description
+                </h3>
+                <button
+                  type="button"
+                  disabled={descSaving}
+                  onClick={onSaveDescription}
+                  className="bg-navy text-white px-5 py-2 rounded-full font-black text-[10px] uppercase tracking-widest disabled:opacity-40 hover:bg-rose-600 transition-all"
+                >
+                  {descSaving ? 'Saving…' : 'Save description'}
+                </button>
+              </div>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={6}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-navy outline-none focus:border-navy bg-white resize-y min-h-[140px]"
+              />
+              {message ? (
+                <p className={`text-[12px] ${message === 'Description saved' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  {message}
+                </p>
+              ) : null}
+            </div>
           </div>
         </div>
       </main>

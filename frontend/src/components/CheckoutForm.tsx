@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { formatDisplayPrice, type CatalogItem } from '@/lib/erpCatalog';
+import { checkCatalogAvailability, formatDisplayPrice, type CatalogItem } from '@/lib/erpCatalog';
 import {
   addToCart,
   createCheckoutSession,
@@ -12,7 +12,6 @@ import {
 } from '@/lib/checkout';
 import { fetchMe, type WebsiteCustomer, type ShippingAddress } from '@/lib/auth';
 import { fetchShippingMethods, type ShippingMethod } from '@/lib/shipping';
-import { quoteCartOffer, type OfferQuote } from '@/lib/cartOffers';
 
 async function loadItem(tag: string): Promise<CatalogItem | null> {
   try {
@@ -46,7 +45,6 @@ export default function CheckoutForm() {
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
   const [shippingMethodId, setShippingMethodId] = useState<string>('');
-  const [quote, setQuote] = useState<OfferQuote | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,10 +99,14 @@ export default function CheckoutForm() {
         return;
       }
 
+      const live = await checkCatalogAvailability(tags);
       const loadedRows = await Promise.all(tags.map((tag) => loadItem(tag)));
       if (cancelled) return;
 
-      const available = loadedRows.filter((row): row is CatalogItem => Boolean(row));
+      const available = loadedRows.filter(
+        (row): row is CatalogItem =>
+          Boolean(row) && live[String(row?.tag_number || '').toUpperCase()]?.available !== false,
+      );
       if (!available.length) {
         setItems([]);
         setError('These items are no longer available.');
@@ -126,21 +128,7 @@ export default function CheckoutForm() {
     };
   }, [tagFromQuery, router]);
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!items.length) {
-      setQuote(null);
-      return;
-    }
-    quoteCartOffer(items.map((item) => item.tag_number)).then((next) => {
-      if (!cancelled) setQuote(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [items]);
-
-  const subtotal = useMemo(
+  const total = useMemo(
     () =>
       items.reduce((sum, item) => {
         const price = Number(item.display_price);
@@ -148,16 +136,13 @@ export default function CheckoutForm() {
       }, 0),
     [items],
   );
-  const discount = quote?.discount || 0;
-  const itemsAmount = quote ? quote.items_amount : subtotal;
-  const freeTags = new Set(quote?.applied?.free_tags || []);
 
   const shippingCharge = useMemo(() => {
     const method = shippingMethods.find((m) => m.id === shippingMethodId);
     return method ? Number(method.charge) || 0 : 0;
   }, [shippingMethods, shippingMethodId]);
 
-  const payable = itemsAmount + shippingCharge;
+  const payable = total + shippingCharge;
 
   async function onPay() {
     if (!items.length || !customer || submitting) return;
@@ -361,16 +346,7 @@ export default function CheckoutForm() {
                     <p className="text-[11px] text-gray-400 uppercase">Tag {item.tag_number}</p>
                     <p className="text-sm font-medium text-[#222] leading-snug mt-1">{item.name}</p>
                     <p className="text-sm font-bold text-[#222] mt-2">
-                      {freeTags.has(item.tag_number) ? (
-                        <span>
-                          <span className="line-through text-gray-400 font-medium mr-2">
-                            {formatDisplayPrice(item.display_price)}
-                          </span>
-                          Free
-                        </span>
-                      ) : (
-                        formatDisplayPrice(item.display_price)
-                      )}
+                      {formatDisplayPrice(item.display_price)}
                     </p>
                   </div>
                 </div>
@@ -379,14 +355,8 @@ export default function CheckoutForm() {
             <div className="mt-5 space-y-2 border-t border-gray-200 pt-4 text-[13px] text-gray-600">
               <div className="flex justify-between">
                 <span>Subtotal</span>
-                <span className="font-medium text-[#222]">{formatDisplayPrice(subtotal)}</span>
+                <span className="font-medium text-[#222]">{formatDisplayPrice(total)}</span>
               </div>
-              {discount > 0 ? (
-                <div className="flex justify-between text-[#00a699]">
-                  <span>{quote?.applied?.name || 'Offer'}</span>
-                  <span className="font-medium">-{formatDisplayPrice(discount)}</span>
-                </div>
-              ) : null}
               <div className="flex justify-between">
                 <span>Shipping</span>
                 <span className={`font-medium ${shippingCharge > 0 ? 'text-[#222]' : 'text-[#00a699]'}`}>

@@ -27,10 +27,8 @@ import erpVisibilityRoutes from './routes/erpVisibility.js';
 import contactInfoRoutes from './routes/contactInfo.js';
 import searchSuggestionsRoutes from './routes/searchSuggestions.js';
 import shippingConfigRoutes from './routes/shippingConfig.js';
-import { publicCartOffersRouter, adminCartOffersRouter } from './routes/cartOffers.js';
-import catalogImportRoutes from './routes/catalogImport.js';
+import catalogImportRoutes, { scheduledSyncRouter } from './routes/catalogImport.js';
 import catalogItemsRoutes from './routes/catalogItems.js';
-import catalogTaxonomyRoutes from './routes/catalogTaxonomy.js';
 import catalogRoutes from './routes/catalog.js';
 import checkoutRoutes from './routes/checkout.js';
 import authRoutes from './routes/auth.js';
@@ -86,7 +84,9 @@ app.use('/api/site/policies', policiesConfigRoutes);
 app.use('/api/site/search-suggestions', searchSuggestionsRoutes);
 app.use('/api/site/landing', landingConfigRoutes);
 app.use('/api/site/shipping', shippingConfigRoutes);
-app.use('/api/site/cart-offers', publicCartOffersRouter);
+
+// Cloud Scheduler: ERP catalog sync every 15 minutes.
+app.use('/api/internal/catalog-sync', scheduledSyncRouter);
 
 app.use('/api/upload', requireAdmin);
 app.use('/api/upload/landing', landingConfigRoutes);
@@ -109,16 +109,14 @@ app.use('/api/upload/erp-visibility', erpVisibilityRoutes);
 app.use('/api/upload/contact', contactInfoRoutes);
 app.use('/api/upload/search-suggestions', searchSuggestionsRoutes);
 app.use('/api/upload/shipping', shippingConfigRoutes);
-app.use('/api/upload/cart-offers', adminCartOffersRouter);
-app.use('/api/upload/catalog/taxonomy', catalogTaxonomyRoutes);
 app.use('/api/upload/catalog/items', catalogItemsRoutes);
 app.use('/api/upload/catalog', catalogImportRoutes);
 
-// Website catalog (Cloud SQL / local Postgres). ERP is used only via admin Re-import.
+// Website copy of the ERP catalog, refreshed by the scheduled sync.
 app.use('/api/catalog', catalogRoutes);
 // Customer email/password auth (website shoppers)
 app.use('/api/auth', authRoutes);
-// Checkout: reserve on website catalog → Razorpay → mark sold
+// Checkout: reserve on ERP → Razorpay → ERP bill on success
 app.use('/api/checkout', checkoutRoutes);
 
 app.use(

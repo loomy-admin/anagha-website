@@ -10,14 +10,30 @@ import {
   type CheckoutCartItem,
 } from '@/lib/checkout';
 import { addToWishlist } from '@/lib/wishlist';
-import { formatDisplayPrice } from '@/lib/erpCatalog';
-import { quoteCartOffer, type OfferQuote } from '@/lib/cartOffers';
+import { checkCatalogAvailability, formatDisplayPrice } from '@/lib/erpCatalog';
 
 export default function CartPage() {
   const router = useRouter();
   const [items, setItems] = useState<CheckoutCartItem[]>([]);
   const [ready, setReady] = useState(false);
-  const [quote, setQuote] = useState<OfferQuote | null>(null);
+  const [soldTags, setSoldTags] = useState<Set<string>>(new Set());
+  const tagKey = items.map((item) => item.tag_number).join('|');
+
+  useEffect(() => {
+    let cancelled = false;
+    const tags = tagKey ? tagKey.split('|') : [];
+    if (!tags.length) {
+      setSoldTags(new Set());
+      return;
+    }
+    checkCatalogAvailability(tags).then((live) => {
+      if (cancelled) return;
+      setSoldTags(new Set(tags.filter((tag) => live[tag]?.available === false)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tagKey]);
 
   useEffect(() => {
     function sync() {
@@ -33,31 +49,15 @@ export default function CartPage() {
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!items.length) {
-      setQuote(null);
-      return;
-    }
-    quoteCartOffer(items.map((item) => item.tag_number)).then((next) => {
-      if (!cancelled) setQuote(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [items]);
-
-  const subtotal = useMemo(
+  const total = useMemo(
     () =>
       items.reduce((sum, item) => {
+        if (soldTags.has(item.tag_number)) return sum;
         const price = Number(item.display_price);
         return sum + (Number.isFinite(price) ? price : 0);
       }, 0),
-    [items],
+    [items, soldTags],
   );
-  const discount = quote?.discount || 0;
-  const total = quote ? quote.items_amount : subtotal;
-  const freeTags = new Set(quote?.applied?.free_tags || []);
 
   if (!ready) {
     return (
@@ -123,17 +123,13 @@ export default function CartPage() {
                 <p className="text-[11px] text-gray-400 uppercase">Tag {item.tag_number}</p>
                 <p className="text-sm font-medium text-[#222] leading-snug mt-1">{item.name}</p>
                 <p className="text-base font-bold text-[#222] mt-2">
-                  {freeTags.has(item.tag_number) ? (
-                    <span>
-                      <span className="line-through text-gray-400 font-medium mr-2">
-                        {formatDisplayPrice(item.display_price)}
-                      </span>
-                      Free
-                    </span>
-                  ) : (
-                    formatDisplayPrice(item.display_price)
-                  )}
+                  {formatDisplayPrice(item.display_price)}
                 </p>
+                {soldTags.has(item.tag_number) ? (
+                  <p className="text-[12px] font-semibold text-red-600 mt-1">
+                    No longer available. This piece has just been sold.
+                  </p>
+                ) : null}
                 <div className="flex items-center gap-4 mt-3">
                   <button
                     type="button"
@@ -169,20 +165,8 @@ export default function CartPage() {
             <p className="text-[11px] uppercase tracking-widest text-gray-400 mb-4">Summary</p>
             <div className="flex justify-between text-sm mb-2">
               <span className="text-gray-500">Items</span>
-              <span className="font-medium">{items.length}</span>
+              <span className="font-medium">{items.length - soldTags.size}</span>
             </div>
-            {discount > 0 ? (
-              <>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-gray-500">Subtotal</span>
-                  <span className="font-medium">{formatDisplayPrice(subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-sm mb-2 text-[#00a699]">
-                  <span>{quote?.applied?.name || 'Offer'}</span>
-                  <span className="font-medium">-{formatDisplayPrice(discount)}</span>
-                </div>
-              </>
-            ) : null}
             <div className="flex justify-between text-base font-bold text-[#222] border-t border-gray-200 pt-3 mt-3 mb-6">
               <span>Total</span>
               <span>{formatDisplayPrice(total)}</span>
@@ -190,7 +174,8 @@ export default function CartPage() {
             <button
               type="button"
               onClick={() => router.push('/checkout')}
-              className="w-full bg-[#f1592a] hover:bg-[#d94a1f] text-white font-bold text-[12px] uppercase tracking-widest py-3.5 rounded-full transition-colors"
+              disabled={soldTags.size >= items.length}
+              className="w-full bg-[#f1592a] hover:bg-[#d94a1f] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-[12px] uppercase tracking-widest py-3.5 rounded-full transition-colors"
             >
               Proceed to checkout
             </button>

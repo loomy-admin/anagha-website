@@ -331,6 +331,8 @@ Health check path: `/health` (startup probe).
 | `ERP_API_URL` | existing ERP Cloud Run `/api` |
 | `ERP_STORE_SLUG` | as today |
 | `ERP_BRANCH_ID` | as today |
+| `WEBSTORE_SECRET` | ERP webstore secret (checkout reserve/complete, website photos) |
+| `CATALOG_SYNC_SECRET` | long random value; Cloud Scheduler sends it (section 17) |
 | `RAZORPAY_KEY_ID` | |
 | `RAZORPAY_KEY_SECRET` | |
 | `RAZORPAY_DISPLAY_NAME` | |
@@ -617,6 +619,56 @@ curl.exe -sI https://anaghajewellers.com/api/auth/me
 
 ---
 
+## 17. Cloud Scheduler — ERP catalog sync
+
+ERP is the live source for products, stock, and product photos. The website keeps a copy in Cloud SQL that one Cloud Scheduler job refreshes every 15 minutes. The sync runs inside the request (Cloud Run only gives CPU while a request is open), so allow a long deadline.
+
+| Job | Schedule (Asia/Kolkata) | Target |
+| --- | --- | --- |
+| `anagha-catalog-sync` | `*/15 * * * *` (every 15 minutes) | `POST https://api.anaghajewellers.com/api/internal/catalog-sync` |
+
+Each run reads ERP's full public catalog, updates changed pieces, and hides (status `sold`) pieces ERP no longer lists. Nothing is deleted. It sends header `x-sync-secret` with the backend's `CATALOG_SYNC_SECRET`.
+
+Between runs, the product page, cart, and checkout also ask ERP live whether a piece is still available (`POST /api/catalog/availability`), so a piece sold in the store disappears as soon as a customer looks at it.
+
+```powershell
+gcloud services enable cloudscheduler.googleapis.com
+
+gcloud scheduler jobs create http anagha-catalog-sync `
+  --location=asia-south1 `
+  --schedule="*/15 * * * *" `
+  --time-zone="Asia/Kolkata" `
+  --http-method=POST `
+  --uri="https://api.anaghajewellers.com/api/internal/catalog-sync" `
+  --headers="x-sync-secret=YOUR_CATALOG_SYNC_SECRET" `
+  --attempt-deadline=300s
+```
+
+Run it immediately to check: `gcloud scheduler jobs run anagha-catalog-sync --location=asia-south1`. The admin **Sync from ERP** button on the Jewellery Catalog page runs the same sync on demand.
+
+---
+
+## 18. Switching from the test ERP to production
+
+The website remembers which ERP store it last synced from. When `ERP_API_URL`, `ERP_STORE_SLUG`, or `ERP_BRANCH_ID` changes, the next complete sync hides every old piece and drops old admin hide flags, then loads the new store. Test orders, website descriptions, and customer accounts are **not** touched by the sync; remove them with the cleanup command.
+
+1. **Back up Cloud SQL:** console → SQL → `anagha-pg` → Backups → Create backup.
+2. **Update the backend on Cloud Run** (Edit & deploy → Variables & Secrets): production `ERP_API_URL`, `ERP_STORE_SLUG`, `ERP_BRANCH_ID`, `WEBSTORE_SECRET`, and Razorpay live `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`. Deploy.
+3. **Clean test data** against the production database, through Cloud SQL Auth Proxy (`cloud-sql-proxy.exe anagha-jewellers:asia-south1:anagha-pg`, then point `DATABASE_URL` at `127.0.0.1:5432`):
+
+   ```powershell
+   cd backend
+   npm run db:go-live-cleanup                          # dry run: shows what would be removed
+   npm run db:go-live-cleanup -- --confirm             # removes test orders, descriptions, catalog copy
+   npm run db:go-live-cleanup -- --confirm --customers # optional: also removes customer accounts
+   ```
+
+   Banners, homepage, policies, shipping methods, and contact settings are kept.
+4. **Load the production catalog:** `gcloud scheduler jobs run anagha-catalog-sync --location=asia-south1`, or admin **Sync from ERP**.
+5. **Review in admin:** category visibility, header tabs, category tile images, and the search suggestions' "What's New" tags (these are saved by category name or tag and may not match production).
+
+---
+
 ## Useful file map
 
 | Path | Role |
@@ -625,4 +677,7 @@ curl.exe -sI https://anaghajewellers.com/api/auth/me
 | [backend/Dockerfile](../backend/Dockerfile) | Express image |
 | [.github/workflows/deploy-gcp.yml](../.github/workflows/deploy-gcp.yml) | CI: build-args → AR → Cloud Run |
 | [backend/src/db/index.ts](../backend/src/db/index.ts) | `pg` pool (Cloud SQL + Neon TCP both work) |
-| [backend/src/lib/objectStorage.ts](../backend/src/lib/objectStorage.ts) | GCS + local `/uploads` |
+| [backend/src/lib/objectStorage.ts](../backend/src/lib/objectStorage.ts) | GCS + local `/uploads` (CMS images) |
+| [backend/src/lib/syncCatalog.ts](../backend/src/lib/syncCatalog.ts) | ERP catalog sync (Scheduler + admin button) |
+| [backend/src/lib/liveAvailability.ts](../backend/src/lib/liveAvailability.ts) | Live ERP availability check (product page, cart, checkout) |
+| [backend/src/lib/erpWebstore.ts](../backend/src/lib/erpWebstore.ts) | ERP checkout reserve / complete / release, website photos |
