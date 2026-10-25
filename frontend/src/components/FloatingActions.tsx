@@ -44,6 +44,12 @@ export default function FloatingActions() {
   const suppressClick = useRef(false);
   const [pos, setPos] = useState<Position | null>(null);
   const [showTop, setShowTop] = useState(false);
+  // Set after mount so server and client render the same link first.
+  const [pageUrl, setPageUrl] = useState('');
+
+  useEffect(() => {
+    setPageUrl(window.location.href);
+  }, [pathname]);
 
   useEffect(() => {
     let initial = defaultPosition();
@@ -116,7 +122,6 @@ export default function FloatingActions() {
   if (pathname?.startsWith('/upload')) return null;
 
   const phone = String(whatsapp || '').replace(/[^0-9]/g, '');
-  const pageUrl = typeof window !== 'undefined' ? window.location.href : '';
   const message = encodeURIComponent(`Hi Anagha Jewellers, I need help.${pageUrl ? ` (${pageUrl})` : ''}`);
 
   return (

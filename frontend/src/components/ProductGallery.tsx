@@ -17,6 +17,17 @@ export default function ProductGallery({
   const [active, setActive] = useState(0);
   const current = realImages[active] || realImages[0] || null;
   const { whatsapp } = useContactInfo();
+  const [zoom, setZoom] = useState<{ x: number; y: number } | null>(null);
+
+  // Mouse only; touch screens keep the plain image.
+  function onZoomMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.pointerType !== 'mouse') return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setZoom({
+      x: Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100)),
+      y: Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100)),
+    });
+  }
 
   const [isWishlisted, setIsWishlisted] = useState(false);
 
@@ -58,7 +69,22 @@ export default function ProductGallery({
     <div className="flex flex-col gap-4 w-full">
       <div className="relative aspect-square w-full max-w-[560px] mx-auto bg-[#f4f6f9] rounded-xl border border-gray-100 flex items-center justify-center p-4 sm:p-8 group overflow-hidden">
         {current ? (
-          <img src={current} alt={alt} className="w-full h-full object-contain" />
+          <div
+            className="w-full h-full overflow-hidden cursor-zoom-in"
+            onPointerMove={onZoomMove}
+            onPointerLeave={() => setZoom(null)}
+          >
+            <img
+              src={current}
+              alt={alt}
+              draggable={false}
+              className="w-full h-full object-contain transition-transform duration-150 ease-out"
+              style={{
+                transform: zoom ? 'scale(2.2)' : 'scale(1)',
+                transformOrigin: zoom ? `${zoom.x}% ${zoom.y}%` : 'center',
+              }}
+            />
+          </div>
         ) : (
           <div className="flex flex-col items-center text-center px-6 max-w-sm">
             <div className="w-16 h-16 rounded-full bg-white border border-gray-200 flex items-center justify-center mb-4">
@@ -110,7 +136,10 @@ export default function ProductGallery({
               <button
                 key={`img-${index}`}
                 type="button"
-                onClick={() => setActive(index)}
+                onClick={() => {
+                  setActive(index);
+                  setZoom(null);
+                }}
                 className={`w-16 h-16 sm:w-20 sm:h-20 p-1 flex items-center justify-center border-2 transition-colors shrink-0 ${
                   selected ? 'border-[#032C5E]' : 'border-gray-200 hover:border-gray-300'
                 }`}
