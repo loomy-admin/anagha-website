@@ -1,4 +1,7 @@
 import { Router } from 'express';
+import { and, eq, inArray, sql } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { cachedCatalogItems } from '../db/schema.js';
 import { getContent, setContent } from '../lib/content.js';
 import { upload } from '../lib/upload.js';
 import { storeCmsUpload } from '../lib/objectStorage.js';
@@ -118,6 +121,46 @@ function collectGroups(rows: unknown[]): HeaderSelectedGroup[] {
   return out;
 }
 
+const DEFAULT_ARTICLES_CACHE_MS = 60 * 1000;
+let defaultArticlesCache: { key: string; at: number; byGroup: Map<string, HeaderArticle[]> } | null = null;
+
+/** Top articles per category by available pieces, used when admin has not picked any. */
+async function defaultArticlesFor(groupSlugs: string[]) {
+  const key = [...groupSlugs].sort().join('|');
+  if (defaultArticlesCache && defaultArticlesCache.key === key && Date.now() - defaultArticlesCache.at < DEFAULT_ARTICLES_CACHE_MS) {
+    return defaultArticlesCache.byGroup;
+  }
+  const byGroup = new Map<string, HeaderArticle[]>();
+  if (groupSlugs.length) {
+    const rows = await db
+      .select({
+        group: cachedCatalogItems.groupSlug,
+        slug: cachedCatalogItems.articleSlug,
+        name: sql<string>`min(${cachedCatalogItems.data}->>'article')`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(cachedCatalogItems)
+      .where(
+        and(
+          inArray(cachedCatalogItems.groupSlug, groupSlugs),
+          eq(cachedCatalogItems.status, 'available'),
+          sql`coalesce(${cachedCatalogItems.data}->>'article', '') <> ''`,
+        ),
+      )
+      .groupBy(cachedCatalogItems.groupSlug, cachedCatalogItems.articleSlug)
+      .orderBy(sql`count(*) desc`);
+    for (const row of rows) {
+      const group = String(row.group || '');
+      const list = byGroup.get(group) || [];
+      if (list.length >= MAX_DROPDOWN_ARTICLES) continue;
+      list.push({ name: String(row.name).trim(), slug: row.slug || undefined });
+      byGroup.set(group, list);
+    }
+  }
+  defaultArticlesCache = { key, at: Date.now(), byGroup };
+  return byGroup;
+}
+
 export async function getHeaderSelection(): Promise<HeaderContent> {
   const header = await getContent<HeaderContent & { navItems?: unknown }>('header', {
     selectedGroups: [],
@@ -128,6 +171,20 @@ export async function getHeaderSelection(): Promise<HeaderContent> {
   // Legacy DB/seed used { navItems } with categories.items — map when selectedGroups is empty.
   if (!out.length && Array.isArray(header.navItems)) {
     out = collectGroups(header.navItems);
+  }
+
+  const needDefaults = out.filter((g) => !g.dropdown.articles.length).map((g) => g.slug);
+  if (needDefaults.length) {
+    try {
+      const defaults = await defaultArticlesFor(needDefaults);
+      out = out.map((g) =>
+        g.dropdown.articles.length
+          ? g
+          : { ...g, dropdown: { ...g.dropdown, articles: defaults.get(g.slug) || [] } },
+      );
+    } catch (err) {
+      console.error('[header] default articles failed', err);
+    }
   }
 
   return { 
