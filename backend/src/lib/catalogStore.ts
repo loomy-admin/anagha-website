@@ -67,6 +67,17 @@ export function inventoryPhotoUrls(data: { images?: unknown; pos_image_url?: unk
   return urls;
 }
 
+/** ERP names generated photos `ai_<timestamp>_<style>.jpg`; the camera photo has no prefix. */
+function isAiPhoto(url: string) {
+  const path = url.split(/[?#]/)[0];
+  return /^ai_/i.test(path.slice(path.lastIndexOf('/') + 1));
+}
+
+/** AI photos first (in ERP's order), then the camera photo, so listings lead with the AI shot. */
+function aiPhotosFirst(urls: string[]) {
+  return [...urls.filter(isAiPhoto), ...urls.filter((url) => !isAiPhoto(url))];
+}
+
 export function toPublicItem(
   row: typeof cachedCatalogItems.$inferSelect,
   extra: Partial<CatalogItemData> = {},
@@ -74,7 +85,7 @@ export function toPublicItem(
   const data =
     row.data && typeof row.data === 'object' ? (row.data as CatalogItemData) : {};
   const gallery = websitePhotoUrls(data);
-  const photos = inventoryPhotoUrls(data);
+  const photos = aiPhotosFirst(inventoryPhotoUrls(data));
   const pos = photos[0] || null;
   const image_url =
     gallery[0] || pos || (typeof data.image_url === 'string' && data.image_url.trim()) || null;
