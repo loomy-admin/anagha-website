@@ -11,6 +11,7 @@
     "db:migrate": "tsx src/scripts/migrate.ts",
     "db:seed": "tsx src/scripts/seed.ts",
     "db:go-live-cleanup": "tsx src/scripts/goLiveCleanup.ts",
+    "db:clear-orders": "tsx src/scripts/clearTestOrders.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

@@ -10,6 +10,8 @@ export type CatalogItemData = Record<string, unknown> & {
   tag_number?: string;
   name?: string | null;
   description?: string | null;
+  /** ERP AI-generated storefront copy; preferred over short POS `description` when present. */
+  website_description?: string | null;
   image_url?: string | null;
   pos_image_url?: string | null;
   website_images?: string[] | null;
@@ -73,9 +75,19 @@ function isAiPhoto(url: string) {
   return /^ai_/i.test(path.slice(path.lastIndexOf('/') + 1));
 }
 
-/** AI photos first (in ERP's order), then the camera photo, so listings lead with the AI shot. */
-function aiPhotosFirst(urls: string[]) {
-  return [...urls.filter(isAiPhoto), ...urls.filter((url) => !isAiPhoto(url))];
+/** When AI photos exist, show only those (hide camera/original). Otherwise keep originals. */
+function preferAiPhotos(urls: string[]) {
+  const ai = urls.filter(isAiPhoto);
+  return ai.length > 0 ? ai : urls;
+}
+
+/** Prefer ERP AI storefront copy; otherwise keep POS/short description (CMS may override later). */
+function publicDescription(data: CatalogItemData): string | null {
+  const ai =
+    typeof data.website_description === 'string' ? data.website_description.trim() : '';
+  if (ai) return ai;
+  if (typeof data.description === 'string') return data.description;
+  return data.description ?? null;
 }
 
 export function toPublicItem(
@@ -85,7 +97,7 @@ export function toPublicItem(
   const data =
     row.data && typeof row.data === 'object' ? (row.data as CatalogItemData) : {};
   const gallery = websitePhotoUrls(data);
-  const photos = aiPhotosFirst(inventoryPhotoUrls(data));
+  const photos = preferAiPhotos(inventoryPhotoUrls(data));
   const pos = photos[0] || null;
   const image_url =
     gallery[0] || pos || (typeof data.image_url === 'string' && data.image_url.trim()) || null;
@@ -94,6 +106,7 @@ export function toPublicItem(
     ...extra,
     id: row.id || data.id || row.tagNumber,
     tag_number: row.tagNumber,
+    description: publicDescription({ ...data, ...extra }),
     images: photos,
     pos_image_url: pos,
     image_url,
