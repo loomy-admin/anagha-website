@@ -219,6 +219,9 @@ export default function ProductDetailPanel({
         <p className="text-[12px] text-gray-600 leading-relaxed">
           {description && description.trim() !== '' && description.length >= 20 ? description.trim() : `Premium ${name} crafted with the finest materials. This exquisite piece features intricate detailing, perfect for elevating your everyday style or making a statement at special events.`}
         </p>
+        <p className="mt-3 text-[11px] text-gray-500 leading-relaxed">
+          Disclaimer: Product images may be AI generated
+        </p>
       </div>
 
       <div className="flex items-center gap-3 mb-5">
