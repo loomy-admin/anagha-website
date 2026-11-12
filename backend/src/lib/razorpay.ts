@@ -166,6 +166,25 @@ export function verifyRazorpayPaymentSignature(input: {
   return crypto.timingSafeEqual(a, b);
 }
 
+function webhookSecret() {
+  return String(process.env.RAZORPAY_WEBHOOK_SECRET || '').trim();
+}
+
+export function razorpayWebhookConfigured() {
+  return Boolean(webhookSecret());
+}
+
+/** HMAC-SHA256 of the raw webhook body with the dashboard webhook secret. */
+export function verifyRazorpayWebhookSignature(rawBody: Buffer | string, signature: string) {
+  const secret = webhookSecret();
+  if (!secret || !signature) return false;
+  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+  const a = Buffer.from(expected);
+  const b = Buffer.from(String(signature));
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
 export async function fetchRazorpayPayment(paymentId: string) {
   try {
     return await client().payments.fetch(paymentId);

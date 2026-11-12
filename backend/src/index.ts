@@ -30,7 +30,7 @@ import shippingConfigRoutes from './routes/shippingConfig.js';
 import catalogImportRoutes, { scheduledSyncRouter } from './routes/catalogImport.js';
 import catalogItemsRoutes from './routes/catalogItems.js';
 import catalogRoutes from './routes/catalog.js';
-import checkoutRoutes from './routes/checkout.js';
+import checkoutRoutes, { razorpayWebhookHandler } from './routes/checkout.js';
 import authRoutes from './routes/auth.js';
 import { requireAdmin } from './lib/customerAuth.js';
 import { UPLOADS_DIR } from './lib/upload.js';
@@ -47,6 +47,14 @@ app.use(
   }),
 );
 app.use(cookieParser());
+// Raw body required for Razorpay webhook HMAC (must be before express.json).
+app.post(
+  '/api/checkout/razorpay/webhook',
+  express.raw({ type: 'application/json' }),
+  (req, res) => {
+    void razorpayWebhookHandler(req, res);
+  },
+);
 app.use(express.json({ limit: '8mb' }));
 app.use(express.urlencoded({ extended: true }));
 
