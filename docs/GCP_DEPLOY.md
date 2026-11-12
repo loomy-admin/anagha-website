@@ -335,6 +335,7 @@ Health check path: `/health` (startup probe).
 | `CATALOG_SYNC_SECRET` | long random value; Cloud Scheduler sends it (section 17) |
 | `RAZORPAY_KEY_ID` | |
 | `RAZORPAY_KEY_SECRET` | |
+| `RAZORPAY_WEBHOOK_SECRET` | Secret you set on the Razorpay webhook (not the API key secret) |
 | `RAZORPAY_DISPLAY_NAME` | |
 | `SMTP_*` / `MAIL_FROM` | optional |
 | `GOOGLE_CLIENT_ID` | optional, must match frontend |
@@ -493,6 +494,7 @@ After DNS + Worker:
 2. Rebuild frontend with `BACKEND_URL=https://api.anaghajewellers.com`
 3. Update Google OAuth authorized origins / redirect URIs
 4. Update Razorpay allowed URLs if required
+5. Add Razorpay webhook (Live mode): URL `https://api.anaghajewellers.com/api/checkout/razorpay/webhook`, events `payment.captured` and `order.paid`, set a webhook secret, put the same value in Cloud Run as `RAZORPAY_WEBHOOK_SECRET`
 
 Alternatives: Cloud Run domain mapping + `ghs.googlehosted.com`, or GCP HTTPS Load Balancer.
 

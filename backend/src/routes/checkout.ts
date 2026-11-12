@@ -10,11 +10,24 @@ import { resolveShippingMethod, getShippingConfig } from './shippingConfig.js';
 import {
   createRazorpayOrder,
   verifyRazorpayPaymentSignature,
+  verifyRazorpayWebhookSignature,
+  razorpayWebhookConfigured,
   fetchRazorpayPayment,
 } from '../lib/razorpay.js';
 import { sendOrderInvoice, sendOrderConfirmationEmail, sendOrderTrackingEmail } from '../lib/mailer.js';
 
 const router = Router();
+
+const FULFILLMENT_STATUSES = ['paid', 'packed', 'shipped', 'delivered'] as const;
+
+/** Statuses we can still mark paid after Razorpay has captured money. */
+const PAYABLE_STATUSES = [
+  'pending',
+  'payment_initiated',
+  'cancelled',
+  'failed',
+  'expired',
+] as const;
 
 /** Express 5 types params as string | string[]; Drizzle eq() needs a string. */
 function paramId(req: Request, name = 'id'): string {
@@ -129,8 +142,6 @@ function publicLineItems(row: typeof checkoutSessions.$inferSelect) {
   }));
 }
 
-const FULFILLMENT_STATUSES = ['paid', 'packed', 'shipped', 'delivered'] as const;
-
 function asAddressObject(raw: unknown): Record<string, unknown> {
   if (!raw) return {};
   if (Array.isArray(raw)) {
@@ -201,7 +212,10 @@ async function withDeliveryEta(row: typeof checkoutSessions.$inferSelect) {
   }
 }
 
-async function finalizePaidSession(sessionId: string, paymentRef: string) {
+async function finalizePaidSession(
+  sessionId: string,
+  paymentRef: string,
+): Promise<{ session: typeof checkoutSessions.$inferSelect; newlyPaid: boolean }> {
   const rows = await db
     .select()
     .from(checkoutSessions)
@@ -211,10 +225,10 @@ async function finalizePaidSession(sessionId: string, paymentRef: string) {
   if (!session) {
     throw Object.assign(new Error('Checkout session not found'), { status: 404 });
   }
-  if (session.status === 'paid') {
-    return session;
+  if (FULFILLMENT_STATUSES.includes(session.status as (typeof FULFILLMENT_STATUSES)[number])) {
+    return { session, newlyPaid: false };
   }
-  if (session.status !== 'pending' && session.status !== 'payment_initiated') {
+  if (!(PAYABLE_STATUSES as readonly string[]).includes(session.status)) {
     throw Object.assign(new Error(`Session cannot be completed from status ${session.status}`), {
       status: 409,
     });
@@ -253,6 +267,7 @@ async function finalizePaidSession(sessionId: string, paymentRef: string) {
   const cartItems = Array.isArray(prevPayload.items) ? prevPayload.items : [];
   const itemNames = namesFromLines(billItems.length ? billItems : cartItems);
 
+  // Only one of confirm-handler / webhook should transition to paid (and email once).
   const [updated] = await db
     .update(checkoutSessions)
     .set({
@@ -270,10 +285,24 @@ async function finalizePaidSession(sessionId: string, paymentRef: string) {
       },
       updatedAt: new Date(),
     })
-    .where(eq(checkoutSessions.id, session.id))
+    .where(
+      and(eq(checkoutSessions.id, session.id), inArray(checkoutSessions.status, [...PAYABLE_STATUSES])),
+    )
     .returning();
 
-  return updated;
+  if (!updated) {
+    const again = await db
+      .select()
+      .from(checkoutSessions)
+      .where(eq(checkoutSessions.id, session.id))
+      .limit(1);
+    if (!again[0]) {
+      throw Object.assign(new Error('Checkout session not found'), { status: 404 });
+    }
+    return { session: again[0], newlyPaid: false };
+  }
+
+  return { session: updated, newlyPaid: true };
 }
 
 /** POST /api/checkout/session — reserve ERP item(s) + Razorpay order (auth required). */
@@ -546,16 +575,132 @@ router.post('/session/:id/confirm-razorpay', async (req: Request, res: Response)
       console.warn('[razorpay] payment fetch failed after signature ok', fetchErr);
     }
 
-    const wasUnpaid = session.status !== 'paid';
-    const updated = await finalizePaidSession(session.id, paymentId);
+    const { session: updated, newlyPaid } = await finalizePaidSession(session.id, paymentId);
 
-    if (wasUnpaid) queuePaidEmails(updated);
+    if (newlyPaid) queuePaidEmails(updated);
 
     res.json({ data: await withDeliveryEta(updated) });
   } catch (err) {
     handle(err, res);
   }
 });
+
+function paymentEntityFromWebhook(body: Record<string, unknown>) {
+  const payload = body.payload && typeof body.payload === 'object'
+    ? (body.payload as Record<string, unknown>)
+    : {};
+  const paymentWrap = payload.payment && typeof payload.payment === 'object'
+    ? (payload.payment as Record<string, unknown>)
+    : {};
+  const orderWrap = payload.order && typeof payload.order === 'object'
+    ? (payload.order as Record<string, unknown>)
+    : {};
+  const payment =
+    paymentWrap.entity && typeof paymentWrap.entity === 'object'
+      ? (paymentWrap.entity as Record<string, unknown>)
+      : {};
+  const order =
+    orderWrap.entity && typeof orderWrap.entity === 'object'
+      ? (orderWrap.entity as Record<string, unknown>)
+      : {};
+  return { payment, order };
+}
+
+/**
+ * Razorpay server-to-server webhook (raw body required for signature).
+ * Mounted in index.ts with express.raw before express.json.
+ * Covers: money captured but browser never called confirm-razorpay.
+ */
+export async function razorpayWebhookHandler(req: Request, res: Response) {
+  try {
+    if (!razorpayWebhookConfigured()) {
+      console.warn('[razorpay-webhook] RAZORPAY_WEBHOOK_SECRET not set');
+      return res.status(503).json({ error: 'Webhook secret not configured' });
+    }
+
+    const raw = Buffer.isBuffer(req.body)
+      ? req.body
+      : Buffer.from(typeof req.body === 'string' ? req.body : '', 'utf8');
+    const signature = String(req.headers['x-razorpay-signature'] || '');
+    if (!verifyRazorpayWebhookSignature(raw, signature)) {
+      return res.status(400).json({ error: 'Invalid webhook signature' });
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(raw.toString('utf8')) as Record<string, unknown>;
+    } catch {
+      return res.status(400).json({ error: 'Invalid JSON body' });
+    }
+
+    const event = String(body.event || '');
+    if (event !== 'payment.captured' && event !== 'order.paid') {
+      return res.status(200).json({ ok: true, ignored: event || 'unknown' });
+    }
+
+    const { payment, order } = paymentEntityFromWebhook(body);
+    const paymentId = String(payment.id || '').trim();
+    const orderId = String(payment.order_id || order.id || '').trim();
+    const payStatus = String(payment.status || '').toLowerCase();
+    const notes =
+      (payment.notes && typeof payment.notes === 'object'
+        ? (payment.notes as Record<string, unknown>)
+        : null) ||
+      (order.notes && typeof order.notes === 'object'
+        ? (order.notes as Record<string, unknown>)
+        : null) ||
+      {};
+    const noteSessionId = String(notes.session_id || '').trim();
+
+    if (event === 'payment.captured' && payStatus && payStatus !== 'captured') {
+      return res.status(200).json({ ok: true, ignored: `payment status ${payStatus}` });
+    }
+    if (!paymentId && !orderId && !noteSessionId) {
+      return res.status(200).json({ ok: true, ignored: 'missing payment identifiers' });
+    }
+
+    let session: typeof checkoutSessions.$inferSelect | undefined;
+    if (orderId) {
+      const byOrder = await db
+        .select()
+        .from(checkoutSessions)
+        .where(eq(checkoutSessions.razorpayOrderId, orderId))
+        .limit(1);
+      session = byOrder[0];
+    }
+    if (!session && noteSessionId) {
+      const byId = await db
+        .select()
+        .from(checkoutSessions)
+        .where(eq(checkoutSessions.id, noteSessionId))
+        .limit(1);
+      session = byId[0];
+    }
+    if (!session) {
+      console.warn('[razorpay-webhook] no checkout session for', { event, orderId, paymentId, noteSessionId });
+      return res.status(200).json({ ok: true, ignored: 'session not found' });
+    }
+
+    if (FULFILLMENT_STATUSES.includes(session.status as (typeof FULFILLMENT_STATUSES)[number])) {
+      return res.status(200).json({ ok: true, already: session.status, session_id: session.id });
+    }
+
+    const ref = paymentId || String(session.razorpayPaymentId || orderId);
+    const { session: updated, newlyPaid } = await finalizePaidSession(session.id, ref);
+    if (newlyPaid) {
+      console.log('[razorpay-webhook] finalized paid session', updated.id, 'via', event);
+      queuePaidEmails(updated);
+    }
+
+    return res.status(200).json({ ok: true, session_id: updated.id, newly_paid: newlyPaid });
+  } catch (err) {
+    console.error('[razorpay-webhook]', err);
+    // Still 200 when possible so Razorpay does not hammer retries for app bugs;
+    // signature/config errors already returned above.
+    const message = err instanceof Error ? err.message : 'Webhook handler failed';
+    return res.status(500).json({ error: message });
+  }
+}
 
 /** GET /api/checkout/session/:id/payment — payload for /checkout/pay */
 router.get('/session/:id/payment', async (req: Request, res: Response) => {
